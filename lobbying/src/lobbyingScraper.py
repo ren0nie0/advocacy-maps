@@ -7,7 +7,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
-def extract_client_links():
+def extract_client_links(year):
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
     url = 'https://www.sec.state.ma.us/LobbyistPublicSearch/Default.aspx'
 
@@ -16,7 +16,7 @@ def extract_client_links():
     driver.find_element('id','ContentPlaceHolder1_rdbSearchByType').click()
     select = Select(driver.find_element(By.CLASS_NAME,'p3'))
 
-    select.select_by_value('2020')
+    select.select_by_value(year)
     Select(driver.find_element('id','ContentPlaceHolder1_ucSearchCriteriaByType_drpType')).select_by_value('L')
     driver.find_element('id','ContentPlaceHolder1_btnSearch').click()
 
@@ -25,7 +25,7 @@ def extract_client_links():
     links_list = [l.get_attribute('href') for l in links if str(l.get_attribute('href')).startswith('javascript') == False]
     driver.quit()
     return links_list
-    
+
 def extract_disclosures(list_of_links):
     disclosure_reports = []
 
