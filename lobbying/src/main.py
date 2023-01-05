@@ -13,7 +13,7 @@
 #
 # right now, we need to start saving it to a SQL database locally
 
-import requests
+import requests, datetime, os
 from lobbyingDataPage import LobbyingDataPage
 from lobbyingScraper import extract_disclosures, extract_client_links
 
@@ -40,7 +40,14 @@ def download_html_list(url_list):
 def save_data_from_url_list(url_list):
     extract_and_save(download_html_list(url_list))
 
+def scrape_past_data():
+    start_year = 2005
+    this_year = datetime.date.today().year
+    date_range = range(start_year, this_year)
+    for year in date_range:
+        extract_and_save(download_html_list(extract_disclosures(extract_client_links(str(year)))))
+
 if __name__ == "__main__":
     #disclosure_links = extract_disclosures(extract_client_links())
     #html_list = download_html_list(disclosure_links)
-    extract_and_save(download_html_list(extract_disclosures(extract_client_links('2020'))))
+    scrape_past_data()
