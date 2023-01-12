@@ -82,7 +82,7 @@ class LobbyingDataPage:
 
     def save(self):
         for table in self.tables.keys():
-            self.write_data(f'{table.replace(" ","_").lower()}.csv', self.tables[table])
+            self.write_data(f'lobbying\data\{table.replace(" ","_").lower()}.csv', self.tables[table])
 
     def write_data(self, file_path, dataframe):
         write = True

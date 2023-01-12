@@ -73,3 +73,5 @@ lobbying/notebooks/2005html.pkl
 lobbying/notebooks/2020html.pkl
 lobbying/notebooks/errorpage.html
 lobbying/notebooks/indivlobbyist.html
+lobbying/data/entities.csv
+lobbying/data/compensation.csv
