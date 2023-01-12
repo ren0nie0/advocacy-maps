@@ -32,9 +32,14 @@ class LobbyingDataPage:
 
     def scrape_tables(self):
         for i in range(len(self.dfs)):
+            df_str = str(self.dfs[i])
             #ACTIVITIES TABLES
-            if 'House / Senate' in str(self.dfs[i]) and len(self.dfs[i]) == 1:
+            if 'House / Senate' in df_str and len(self.dfs[i]) == 1:
                 self.get_activities(i)
+
+            #CLIENT COMPENSATION
+            if 'Client Compensation' in df_str and len(self.dfs[i]) == 2:
+                self.get_compensation(i)
 
     def get_activities(self, i):
         self.tables.setdefault('Activities', pd.DataFrame()) #Create table if it doesn't exist
@@ -48,6 +53,15 @@ class LobbyingDataPage:
         table.insert(0, 'Lobbyist', lobbyist)
         table.insert(0, 'Date Range', self.date_range)
         self.tables['Activities'] = pd.concat( [self.tables['Activities'], table])
+
+    def get_compensation(self, i):
+        self.tables.setdefault('Compensation', pd.DataFrame())
+        comp_str = self.dfs[i][0][1]
+        data = re.findall(r'[\w\s\.&,]+\s\$[\d,\.]+', comp_str[11:])
+        data = [d.split(" $") for d in data]
+        data = [[d[0], float(d[1].replace(',',''))] for d in data if len(d) == 2]
+        table = pd.DataFrame(data, columns = ['Name', 'Amount'])
+        self.tables['Compensation'] = pd.concat( [self.tables['Compensation'], table])
 
     def clean_entry(entry):
         return re.sub("\s\s+", " ", entry)
