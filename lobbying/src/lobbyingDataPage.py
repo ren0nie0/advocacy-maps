@@ -59,12 +59,6 @@ class LobbyingDataPage:
     def save(self):
         for table in self.tables.keys():
             self.write_data(f'{table.replace(" ","_").lower()}.csv', self.tables[table])
-        if not self.lobbying_data.empty:
-            self.write_data(LobbyingDataPage.lobbying_file, self.lobbying_data)
-        if not self.compensation_data.empty:
-            self.write_data(LobbyingDataPage.compensation_file, self.compensation_data)
-        if not self.contributions_data.empty:
-            self.write_data(LobbyingDataPage.contributions_file, self.contributions_data)
 
     def write_data(self, file_path, dataframe):
         write = True
