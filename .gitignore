@@ -68,3 +68,8 @@ infra/prod/typesense-secrets.yml
 
 storybook-static
 /token
+
+lobbying/notebooks/2005html.pkl
+lobbying/notebooks/2020html.pkl
+lobbying/notebooks/errorpage.html
+lobbying/notebooks/indivlobbyist.html
