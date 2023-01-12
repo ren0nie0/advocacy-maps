@@ -2,130 +2,63 @@ import os
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup as bs
+import re
 
 class LobbyingDataPage:
-    lobbying_file = 'lobbying/data/lobbying.csv'
-    compensation_file = 'lobbying/data/compensation.csv'
-    contributions_file = 'lobbying/data/contributions.csv'
-
     def __init__(self, html):
-        self.html = html
-        self.soup = bs(self.html,'html.parser')
-
-        self.is_entity = bool(self.soup.find('span', {'id': 'ContentPlaceHolder1_ERegistrationInfoReview1_lblEntityCompany'}))
-
-        self.company_name = self.get_company_name()
-        self.date_range = self.get_date_range()
-
-        if (self.soup.find('tr', {'class': 'GridHeader'})):
-            self.lobbying_data = self.extract_lobbying_data()
-            self.compensation_data = self.extract_compensation_data()
-            self.contributions_data = self.extract_contributions_data()
-
+        self.tables = {}
+        self.dfs = pd.read_html(html)
+        if 'An Error Occurred' in str(self.dfs[0][0]):
+            #end this. Set default values?
+            pass
         else:
-            self.lobbying_data = pd.DataFrame()
-            self.compensation_data = pd.DataFrame()
-            self.contributions_data = pd.DataFrame()
+            self.is_entity = 'Entity' in self.dfs[4][0][2]
+            self.get_date_range()
+            self.get_header()
+            self.scrape_tables()
 
     def get_date_range(self):
-        return self.soup.find('span', {'id': 'ContentPlaceHolder1_lblYear'}).text
+        self.date_range = self.dfs[4][0][2].split('period:  ')[1]
 
-    def get_company_name(self):
+    #Extracts the table of header info from the top of the page
+    def get_header(self):
+        table = self.dfs[5][0:7].transpose()
+        table.columns = table.iloc[0]
+        table = table[1:]
         if self.is_entity:
-            return self.soup.find('span', {'id': 'ContentPlaceHolder1_ERegistrationInfoReview1_lblEntityCompany'}).text
+            self.tables['Entities'] = table
         else:
-            return self.soup.find('span', {'id': 'ContentPlaceHolder1_LRegistrationInfoReview1_lblLobbyistCompany'}).text
+            self.tables['Lobbyists'] = table
 
-    def prep_tables(self):
-        some_tables = self.soup.find_all('tr', {'style': 'vertical-align: top'})
+    def scrape_tables(self):
+        for i in range(len(self.dfs)):
+            #ACTIVITIES TABLES
+            if 'House / Senate' in str(self.dfs[i]) and len(self.dfs[i]) == 1:
+                self.get_activities(i)
 
-        #Extract tables that contain the word 'lobbyist' and split at that word
-        if 'Lobbyist name' in some_tables[0].text:
-            split_tables = [table for table in some_tables if 'Client: ' in table.text][0].text.split('Client: ')
+    def get_activities(self, i):
+        self.tables.setdefault('Activities', pd.DataFrame()) #Create table if it doesn't exist
+        client = str(self.dfs[i-1][0][0]).split('Client:')[1].strip()
+        if self.is_entity:
+            lobbyist = self.dfs[i-2][0][0].split('Lobbyist:')[1].strip()
         else:
-            split_tables = [table for table in some_tables if 'Lobbyist: ' in table.text][0].text.split('Lobbyist: ')
-        #Strip out junk
-        the_tables = [entry for entry in split_tables if entry.strip() and 'House / Senate' in entry]
+            lobbyist = str(self.tables['Lobbyists']['Lobbyist name'][1])
+        table = self.dfs[i+1][:-1]
+        table.insert(0, 'Client', client)
+        table.insert(0, 'Lobbyist', lobbyist)
+        table.insert(0, 'Date Range', self.date_range)
+        self.tables['Activities'] = pd.concat( [self.tables['Activities'], table])
 
-        clean_tables = []
-        for table in the_tables:
-            clean_table = [line for line in table.split('\n') if line] # divide by lines and remove empties
-            clean_table = clean_table[:clean_table.index('\xa0\xa0\xa0')] # Remove ending cruft
-            clean_tables.append(clean_table)
+    def clean_entry(entry):
+        return re.sub("\s\s+", " ", entry)
 
-        return clean_tables
+    def fetch_tables(self):
+        return self.tables
 
-    def extract_lobbying_data(self):
-        if self.soup.find('span', {'id': 'ContentPlaceHolder1_LRegistrationInfoReview1_lblIncidental'}):
-            return pd.DataFrame()
-        clean_tables = self.prep_tables()
-        row_dicts = []
-
-        for table in clean_tables:
-            lobbyist_name = table[0].strip()
-            client_name = table[2].strip()
-            table_start_index = table.index('House / SenateBill Number or Agency NameBill title or activityAgent positionAmountDirect business association')+1
-            table_data = table[table_start_index:]
-
-            i=0
-            while i <= len(table_data)-8:
-                row_dicts.append({'LobbyingEntity': self.company_name,
-                                'DateRange': self.date_range,
-                                'Lobbyist': lobbyist_name,
-                                'Client': client_name,
-                                'House/Senate': table_data[i].strip(),
-                                'BillNumber':table_data[i+1].strip(),
-                                'BillActivity':table_data[i+2].strip(),
-                                'AgentPosition': table_data[i+3].strip(),
-                                'Amount': table_data[i+5].strip(),
-                                'DirectBusinessAssosciation': table_data[i+7].strip()})
-                i=i+8
-        return pd.DataFrame(row_dicts)
-
-    def extract_contributions_data(self):
-
-        bad_data = [element.split("Lobbyist: ")[0] for element in self.soup.text.split('Campaign Contributions') if "DateLobbyist nameRecipient nameOffice soughtAmount" in element]
-        if not bad_data:
-            print("NO DATA")
-        pass1 = [element.split('Total contributions')[0] for element in bad_data]
-        pass2 = [element.split('soughtAmount\n\n')[1:][0] for element in pass1]
-        pass3 = "".join(pass2)
-        data = [element.strip() for element in pass3.split('\n') if element.strip()]
-
-        i = 0
-        row_dicts = []
-        while i < len(data):
-            date = data[i].split()[0]
-            lobbyist = " ".join(data[i].split()[1:])
-            recipient = data[i+1]
-            office = data[i+2]
-            amount = data[i+3]
-            row_dicts.append({  'LobbyingEntity': self.company_name,
-                                'DateRange': self.date_range,
-                                'Date': date,
-                                'LobbyistName': lobbyist,
-                                'RecipientName': recipient,
-                                'OfficeSought': office,
-                                'Amount': amount})
-            i=i+4
-
-        return pd.DataFrame(row_dicts)
-
-    def extract_compensation_data(self):
-        compensation_table = self.soup.find('table', {'id': 'ContentPlaceHolder1_DisclosureReviewDetail1_grdvClientPaidToEntity'})
-        if not bool(compensation_table):
-            return pd.DataFrame()
-        temp_list = [line.strip() for line in compensation_table.text.split('\n') if line.strip()][1:-2]
-
-        temp_dict_list = []
-        for entry in temp_list:
-            if entry[0] != '$':
-                client_name = entry
-            else:
-                temp_dict_list.append({'LobbyingEntity': self.company_name, 'DateRange':self.date_range, 'Client': client_name, 'Amount':entry})
-        return pd.DataFrame(temp_dict_list)
 
     def save(self):
+        for table in self.tables.keys():
+            self.write_data(f'{table.replace(" ","_").lower()}.csv', self.tables[table])
         if not self.lobbying_data.empty:
             self.write_data(LobbyingDataPage.lobbying_file, self.lobbying_data)
         if not self.compensation_data.empty:
@@ -135,18 +68,17 @@ class LobbyingDataPage:
 
     def write_data(self, file_path, dataframe):
         write = True
-        if os.path.exists(file_path):
-            with open(file_path, mode = 'r', encoding = 'utf-8') as f:
-                for line in f:
-                    if self.company_name in line and self.date_range in line:
-                        print('Data already present in ' + file_path)
-                        write = False
-                        break
+        #if os.path.exists(file_path):
+        with open(file_path, mode = 'a', encoding = 'utf-8') as f:
+            for line in f:
+                if self.company_name in line and self.date_range in line:
+                    print('Data already present in ' + file_path)
+                    write = False
+                    break
 
         if write and type(dataframe) == pd.DataFrame:
             print('Saving data to ' + file_path)
             dataframe.to_csv(file_path, mode ='a+',header=(not os.path.exists(file_path)), index=False)
-
 
 
 def extract_and_save(html_list):
