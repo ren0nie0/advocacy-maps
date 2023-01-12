@@ -41,6 +41,11 @@ class LobbyingDataPage:
             if 'Client Compensation' in df_str and len(self.dfs[i]) == 2:
                 self.get_compensation(i)
 
+            #SALARIES
+            if 'Salaries' in df_str and len(self.dfs[i]) == 2:
+                self.get_salaries(i)
+
+
     def get_activities(self, i):
         self.tables.setdefault('Activities', pd.DataFrame()) #Create table if it doesn't exist
         client = str(self.dfs[i-1][0][0]).split('Client:')[1].strip()
@@ -62,6 +67,11 @@ class LobbyingDataPage:
         data = [[d[0], float(d[1].replace(',',''))] for d in data if len(d) == 2]
         table = pd.DataFrame(data, columns = ['Name', 'Amount'])
         self.tables['Compensation'] = pd.concat( [self.tables['Compensation'], table])
+
+    def get_salaries(self, i):
+        self.tables.setdefault('Salaries', pd.DataFrame())
+        table = self.dfs[i][:-1]
+        self.tables['Salaries'] = pd.concat( [self.tables['Salaries'], table])
 
     def clean_entry(entry):
         return re.sub("\s\s+", " ", entry)
