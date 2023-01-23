@@ -4,31 +4,58 @@ import requests
 from bs4 import BeautifulSoup as bs
 import re
 
-class LobbyingDataPage:
+class DataPage:
     def __init__(self, html):
         self.tables = {}
         self.dfs = pd.read_html(html)
-        if 'An Error Occurred' in str(self.dfs[0][0]):
-            #end this. Set default values?
-            pass
-        else:
-            self.is_entity = 'Entity' in self.dfs[4][0][2]
-            self.get_date_range()
-            self.get_header()
-            self.scrape_tables()
+        self.get_date_range()
+        self.get_header()
+        self.scrape_tables()
 
     def get_date_range(self):
         self.date_range = self.dfs[4][0][2].split('period:  ')[1]
 
-    #Extracts the table of header info from the top of the page
     def get_header(self):
-        table = self.dfs[5][0:7].transpose()
-        table.columns = table.iloc[0]
-        table = table[1:]
-        if self.is_entity:
-            self.tables['Entities'] = table
-        else:
-            self.tables['Lobbyists'] = table
+        self.tables['Headers'] = pd.DataFrame(columns=['Authorizing Officer name','Lobbyist name','Title','Business name','Address','City, state, zip code','Country','Agent type','Phone'])
+        header = self.dfs[5][0:7].transpose()
+        header.columns = header.iloc[0]
+        header = header[1:]
+        self.tables['Headers'].append(header)
+
+    def scrape_tables(self):
+        pass
+
+    def save(self):
+        for table in self.tables.keys():
+            self.write_data(f'lobbying\data\{table.replace(" ","_").lower()}.csv', self.tables[table])
+
+    def write_data(self, file_path, dataframe):
+        write = True
+        #if os.path.exists(file_path):
+        with open(file_path, mode = 'a', encoding = 'utf-8') as f:
+            for line in f:
+                if self.company_name in line and self.date_range in line:
+                    print('Data already present in ' + file_path)
+                    write = False
+                    break
+
+        if write and type(dataframe) == pd.DataFrame:
+            print('Saving data to ' + file_path)
+            dataframe.to_csv(file_path, mode ='a+',header=(not os.path.exists(file_path)), index=False)
+
+
+
+class LobbyistDataPage(DataPage):
+    def __init__(self, html):
+        DataPage.__init__(self, html)
+
+    def scrape_tables(self):
+        pass
+
+
+class EntityDataPage(DataPage):
+    def __init__(self, html):
+        DataPage.__init__(self,html)
 
     def scrape_tables(self):
         for i in range(len(self.dfs)):
@@ -79,24 +106,6 @@ class LobbyingDataPage:
     def fetch_tables(self):
         return self.tables
 
-
-    def save(self):
-        for table in self.tables.keys():
-            self.write_data(f'lobbying\data\{table.replace(" ","_").lower()}.csv', self.tables[table])
-
-    def write_data(self, file_path, dataframe):
-        write = True
-        #if os.path.exists(file_path):
-        with open(file_path, mode = 'a', encoding = 'utf-8') as f:
-            for line in f:
-                if self.company_name in line and self.date_range in line:
-                    print('Data already present in ' + file_path)
-                    write = False
-                    break
-
-        if write and type(dataframe) == pd.DataFrame:
-            print('Saving data to ' + file_path)
-            dataframe.to_csv(file_path, mode ='a+',header=(not os.path.exists(file_path)), index=False)
 
 
 def extract_and_save(html_list):
