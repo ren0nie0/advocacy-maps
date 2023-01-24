@@ -6,8 +6,10 @@ import re
 
 class DataPage:
     def __init__(self, html):
-        self.tables = {}
+        self.tables = {} # A dictionary that will hold all the tables as they are extracted
+
         self.dfs = pd.read_html(html)
+
         self.get_date_range()
         self.get_header()
         self.scrape_tables()
@@ -17,14 +19,16 @@ class DataPage:
 
     def get_header(self):
         self.tables['Headers'] = pd.DataFrame(columns=['Authorizing Officer name','Lobbyist name','Title','Business name','Address','City, state, zip code','Country','Agent type','Phone'])
-        header = self.dfs[5][0:7].transpose()
-        header.columns = header.iloc[0]
-        header = header[1:]
+        header = self.dfs[5][0:7].transpose() #Extract header table and orient it properly
+        header.columns = header.iloc[0] #Pull the column names from the first row...
+        header = header[1:] # ... and then drop that row
         self.tables['Headers'].append(header)
 
+    # Empty function, needs to be implemented seperately for Lobbyists and Entities
     def scrape_tables(self):
         pass
 
+    # Attempts to save each table from the page to disk
     def save(self):
         for table in self.tables.keys():
             self.write_data(f'lobbying\data\{table.replace(" ","_").lower()}.csv', self.tables[table])
@@ -52,7 +56,6 @@ class LobbyistDataPage(DataPage):
     def scrape_tables(self):
         pass
 
-
 class EntityDataPage(DataPage):
     def __init__(self, html):
         DataPage.__init__(self,html)
@@ -76,10 +79,7 @@ class EntityDataPage(DataPage):
     def get_activities(self, i):
         self.tables.setdefault('Activities', pd.DataFrame()) #Create table if it doesn't exist
         client = str(self.dfs[i-1][0][0]).split('Client:')[1].strip()
-        if self.is_entity:
-            lobbyist = self.dfs[i-2][0][0].split('Lobbyist:')[1].strip()
-        else:
-            lobbyist = str(self.tables['Lobbyists']['Lobbyist name'][1])
+        lobbyist = self.dfs[i-2][0][0].split('Lobbyist:')[1].strip()
         table = self.dfs[i+1][:-1]
         table.insert(0, 'Client', client)
         table.insert(0, 'Lobbyist', lobbyist)
@@ -100,12 +100,13 @@ class EntityDataPage(DataPage):
         table = self.dfs[i][:-1]
         self.tables['Salaries'] = pd.concat( [self.tables['Salaries'], table])
 
+    # Helper function to replace all blocks of whitespace with a single space
     def clean_entry(entry):
         return re.sub("\s\s+", " ", entry)
 
+    # Getter function, mostly here for testing purposes
     def fetch_tables(self):
         return self.tables
-
 
 
 def extract_and_save(html_list):
