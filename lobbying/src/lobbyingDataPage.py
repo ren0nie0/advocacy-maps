@@ -10,12 +10,25 @@ class DataPage:
 
         self.dfs = pd.read_html(html)
 
-        self.get_date_range()
+        self.get_source_info()
         self.get_header()
         self.scrape_tables()
 
+    def get_source_info(self):
+        self.get_date_range()
+        self.get_source_name()
+
     def get_date_range(self):
         self.date_range = self.dfs[4][0][2].split('period:  ')[1]
+
+    # Implement seperately for lobbyists and entities
+    def get_source_name():
+        pass
+
+    # Empty function, needs to be implemented seperately for Lobbyists and Entities
+    # This function does the actual work of scraping the tables. Calls a bunch of helpers
+    def scrape_tables(self):
+        pass
 
     def get_header(self):
         self.tables['Headers'] = pd.DataFrame(columns=['Authorizing Officer name','Lobbyist name','Title','Business name','Address','City, state, zip code','Country','Agent type','Phone'])
@@ -24,9 +37,12 @@ class DataPage:
         header = header[1:] # ... and then drop that row
         self.tables['Headers'].append(header)
 
-    # Empty function, needs to be implemented seperately for Lobbyists and Entities
-    def scrape_tables(self):
-        pass
+
+    # This function adds the date range and entity / lobbyist name to each table
+    def add_source(self):
+        for table in self.tables:
+            table['Date Range'] = self.date_range
+            table['Source'] = self.source_name
 
     # Attempts to save each table from the page to disk
     def save(self):
@@ -56,9 +72,15 @@ class LobbyistDataPage(DataPage):
     def scrape_tables(self):
         pass
 
+    def get_source_name(self):
+        self.source_name = self.tables['Headers']['Lobbyist name']
+
 class EntityDataPage(DataPage):
     def __init__(self, html):
         DataPage.__init__(self,html)
+
+    def get_source_name(self):
+        self.source_name = self.tables['Headers']['Business name']
 
     def scrape_tables(self):
         for i in range(len(self.dfs)):
