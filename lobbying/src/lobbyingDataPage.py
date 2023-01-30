@@ -2,146 +2,62 @@ import os
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup as bs
+import re
 
-class LobbyingDataPage:
-    lobbying_file = 'lobbying/data/lobbying.csv'
-    compensation_file = 'lobbying/data/compensation.csv'
-    contributions_file = 'lobbying/data/contributions.csv'
-
+class DataPage:
     def __init__(self, html):
-        self.html = html
-        self.soup = bs(self.html,'html.parser')
+        self.tables = {} # A dictionary that will hold all the tables as they are extracted
 
-        self.is_entity = bool(self.soup.find('span', {'id': 'ContentPlaceHolder1_ERegistrationInfoReview1_lblEntityCompany'}))
+        self.dfs = pd.read_html(html)
 
-        self.company_name = self.get_company_name()
-        self.date_range = self.get_date_range()
+        self.get_source_info()
+        self.get_header()
+        self.scrape_tables()
 
-        if (self.soup.find('tr', {'class': 'GridHeader'})):
-            self.lobbying_data = self.extract_lobbying_data()
-            self.compensation_data = self.extract_compensation_data()
-            self.contributions_data = self.extract_contributions_data()
-
-        else:
-            self.lobbying_data = pd.DataFrame()
-            self.compensation_data = pd.DataFrame()
-            self.contributions_data = pd.DataFrame()
+    def get_source_info(self):
+        self.get_date_range()
+        self.get_source_name()
 
     def get_date_range(self):
-        return self.soup.find('span', {'id': 'ContentPlaceHolder1_lblYear'}).text
+        self.date_range = self.dfs[4][0][2].split('period:  ')[1]
 
-    def get_company_name(self):
-        if self.is_entity:
-            return self.soup.find('span', {'id': 'ContentPlaceHolder1_ERegistrationInfoReview1_lblEntityCompany'}).text
-        else:
-            return self.soup.find('span', {'id': 'ContentPlaceHolder1_LRegistrationInfoReview1_lblLobbyistCompany'}).text
+    # Implement seperately for lobbyists and entities
+    def get_source_name():
+        pass
 
-    def prep_tables(self):
-        some_tables = self.soup.find_all('tr', {'style': 'vertical-align: top'})
+    # Empty function, needs to be implemented seperately for Lobbyists and Entities
+    # This function does the actual work of scraping the tables. Calls a bunch of helpers
+    def scrape_tables(self):
+        pass
 
-        #Extract tables that contain the word 'lobbyist' and split at that word
-        if 'Lobbyist name' in some_tables[0].text:
-            split_tables = [table for table in some_tables if 'Client: ' in table.text][0].text.split('Client: ')
-        else:
-            split_tables = [table for table in some_tables if 'Lobbyist: ' in table.text][0].text.split('Lobbyist: ')
-        #Strip out junk
-        the_tables = [entry for entry in split_tables if entry.strip() and 'House / Senate' in entry]
+    def get_header(self):
+        self.tables['Headers'] = pd.DataFrame(columns=['Authorizing Officer name','Lobbyist name','Title','Business name','Address','City, state, zip code','Country','Agent type','Phone'])
+        header = self.dfs[5][0:7].transpose() #Extract header table and orient it properly
+        header.columns = header.iloc[0] #Pull the column names from the first row...
+        header = header[1:] # ... and then drop that row
+        self.tables['Headers'].append(header)
 
-        clean_tables = []
-        for table in the_tables:
-            clean_table = [line for line in table.split('\n') if line] # divide by lines and remove empties
-            clean_table = clean_table[:clean_table.index('\xa0\xa0\xa0')] # Remove ending cruft
-            clean_tables.append(clean_table)
 
-        return clean_tables
+    # This function adds the date range and entity / lobbyist name to each table
+    def add_source(self):
+        for table in self.tables:
+            table['Date Range'] = self.date_range
+            table['Source'] = self.source_name
 
-    def extract_lobbying_data(self):
-        if self.soup.find('span', {'id': 'ContentPlaceHolder1_LRegistrationInfoReview1_lblIncidental'}):
-            return pd.DataFrame()
-        clean_tables = self.prep_tables()
-        row_dicts = []
-
-        for table in clean_tables:
-            lobbyist_name = table[0].strip()
-            client_name = table[2].strip()
-            table_start_index = table.index('House / SenateBill Number or Agency NameBill title or activityAgent positionAmountDirect business association')+1
-            table_data = table[table_start_index:]
-
-            i=0
-            while i <= len(table_data)-8:
-                row_dicts.append({'LobbyingEntity': self.company_name,
-                                'DateRange': self.date_range,
-                                'Lobbyist': lobbyist_name,
-                                'Client': client_name,
-                                'House/Senate': table_data[i].strip(),
-                                'BillNumber':table_data[i+1].strip(),
-                                'BillActivity':table_data[i+2].strip(),
-                                'AgentPosition': table_data[i+3].strip(),
-                                'Amount': table_data[i+5].strip(),
-                                'DirectBusinessAssosciation': table_data[i+7].strip()})
-                i=i+8
-        return pd.DataFrame(row_dicts)
-
-    def extract_contributions_data(self):
-
-        bad_data = [element.split("Lobbyist: ")[0] for element in self.soup.text.split('Campaign Contributions') if "DateLobbyist nameRecipient nameOffice soughtAmount" in element]
-        if not bad_data:
-            print("NO DATA")
-        pass1 = [element.split('Total contributions')[0] for element in bad_data]
-        pass2 = [element.split('soughtAmount\n\n')[1:][0] for element in pass1]
-        pass3 = "".join(pass2)
-        data = [element.strip() for element in pass3.split('\n') if element.strip()]
-
-        i = 0
-        row_dicts = []
-        while i < len(data):
-            date = data[i].split()[0]
-            lobbyist = " ".join(data[i].split()[1:])
-            recipient = data[i+1]
-            office = data[i+2]
-            amount = data[i+3]
-            row_dicts.append({  'LobbyingEntity': self.company_name,
-                                'DateRange': self.date_range,
-                                'Date': date,
-                                'LobbyistName': lobbyist,
-                                'RecipientName': recipient,
-                                'OfficeSought': office,
-                                'Amount': amount})
-            i=i+4
-
-        return pd.DataFrame(row_dicts)
-
-    def extract_compensation_data(self):
-        compensation_table = self.soup.find('table', {'id': 'ContentPlaceHolder1_DisclosureReviewDetail1_grdvClientPaidToEntity'})
-        if not bool(compensation_table):
-            return pd.DataFrame()
-        temp_list = [line.strip() for line in compensation_table.text.split('\n') if line.strip()][1:-2]
-
-        temp_dict_list = []
-        for entry in temp_list:
-            if entry[0] != '$':
-                client_name = entry
-            else:
-                temp_dict_list.append({'LobbyingEntity': self.company_name, 'DateRange':self.date_range, 'Client': client_name, 'Amount':entry})
-        return pd.DataFrame(temp_dict_list)
-
+    # Attempts to save each table from the page to disk
     def save(self):
-        if not self.lobbying_data.empty:
-            self.write_data(LobbyingDataPage.lobbying_file, self.lobbying_data)
-        if not self.compensation_data.empty:
-            self.write_data(LobbyingDataPage.compensation_file, self.compensation_data)
-        if not self.contributions_data.empty:
-            self.write_data(LobbyingDataPage.contributions_file, self.contributions_data)
+        for table in self.tables.keys():
+            self.write_data(f'lobbying\data\{table.replace(" ","_").lower()}.csv', self.tables[table])
 
     def write_data(self, file_path, dataframe):
         write = True
-        if os.path.exists(file_path):
-            with open(file_path, mode = 'r', encoding = 'utf-8') as f:
-                for line in f:
-                    if self.company_name in line and self.date_range in line:
-                        print('Data already present in ' + file_path)
-                        write = False
-                        break
+        #if os.path.exists(file_path):
+        with open(file_path, mode = 'a', encoding = 'utf-8') as f:
+            for line in f:
+                if self.company_name in line and self.date_range in line:
+                    print('Data already present in ' + file_path)
+                    write = False
+                    break
 
         if write and type(dataframe) == pd.DataFrame:
             print('Saving data to ' + file_path)
@@ -149,19 +65,88 @@ class LobbyingDataPage:
 
 
 
+class LobbyistDataPage(DataPage):
+    def __init__(self, html):
+        DataPage.__init__(self, html)
+
+    def scrape_tables(self):
+        pass
+
+    def get_source_name(self):
+        self.source_name = self.tables['Headers']['Lobbyist name']
+
+class EntityDataPage(DataPage):
+    def __init__(self, html):
+        DataPage.__init__(self,html)
+
+    def get_source_name(self):
+        self.source_name = self.tables['Headers']['Business name']
+
+    def scrape_tables(self):
+        for i in range(len(self.dfs)):
+            df_str = str(self.dfs[i])
+            #ACTIVITIES TABLES
+            if 'House / Senate' in df_str and len(self.dfs[i]) == 1:
+                self.get_activities(i)
+
+            #CLIENT COMPENSATION
+            if 'Client Compensation' in df_str and len(self.dfs[i]) == 2:
+                self.get_compensation(i)
+
+            #SALARIES
+            if 'Salaries' in df_str and len(self.dfs[i]) == 2:
+                self.get_salaries(i)
+
+
+    def get_activities(self, i):
+        self.tables.setdefault('Activities', pd.DataFrame()) #Create table if it doesn't exist
+        client = str(self.dfs[i-1][0][0]).split('Client:')[1].strip()
+        lobbyist = self.dfs[i-2][0][0].split('Lobbyist:')[1].strip()
+        table = self.dfs[i+1][:-1]
+        table.insert(0, 'Client', client)
+        table.insert(0, 'Lobbyist', lobbyist)
+        table.insert(0, 'Date Range', self.date_range)
+        self.tables['Activities'] = pd.concat( [self.tables['Activities'], table])
+
+    def get_compensation(self, i):
+        self.tables.setdefault('Compensation', pd.DataFrame())
+        comp_str = self.dfs[i][0][1]
+        data = re.findall(r'[\w\s\.&,]+\s\$[\d,\.]+', comp_str[11:])
+        data = [d.split(" $") for d in data]
+        data = [[d[0], float(d[1].replace(',',''))] for d in data if len(d) == 2]
+        table = pd.DataFrame(data, columns = ['Name', 'Amount'])
+        self.tables['Compensation'] = pd.concat( [self.tables['Compensation'], table])
+
+    def get_salaries(self, i):
+        self.tables.setdefault('Salaries', pd.DataFrame())
+        table = self.dfs[i][:-1]
+        self.tables['Salaries'] = pd.concat( [self.tables['Salaries'], table])
+
+    # Helper function to replace all blocks of whitespace with a single space
+    def clean_entry(entry):
+        return re.sub("\s\s+", " ", entry)
+
+    # Getter function, mostly here for testing purposes
+    def fetch_tables(self):
+        return self.tables
+
+# Takes a list of html files, extracts the data, and saves them to disk
 def extract_and_save(html_list):
+    ## TODO: Add check for entity vs lobbyist
     #for html in html_list:
         #LobbyingDataPage(html).save()
     for i in range(len(html_list)):
         print("Saving "+str(i))
-        LobbyingDataPage(html_list[i]).save()
+        DataPage(html_list[i]).save()
 
+# Downloads html from a url
 def pull_data(url):
     headers={"User-Agent": "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"}
     result = requests.get(url, headers=headers)
     result.raise_for_status()
     return result.content
 
+# Downloads a list of html pages from a list of url's
 def download_html_list(url_list):
     html_list = []
     for url in url_list:
@@ -169,6 +154,7 @@ def download_html_list(url_list):
         html_list.append(pull_data(url))
     return html_list
 
+# Takes a list of URL's, downloads them, processes them, and saves them to disk
 def save_data_from_url_list(url_list):
     disclosure_links = extract_and_save(download_html_list(url_list))
     html_list = download_html_list(disclosure_links)
