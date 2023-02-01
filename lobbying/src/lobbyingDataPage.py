@@ -7,12 +7,19 @@ import re
 class DataPage:
     def __init__(self, html):
         self.tables = {} # A dictionary that will hold all the tables as they are extracted
-
+        self.soup = bs(html, 'html.parser')
         self.dfs = pd.read_html(html)
 
-        self.get_source_info()
-        self.get_header()
-        self.scrape_tables()
+        if self.check_validity():
+            self.get_header()
+            self.get_source_info()
+            self.scrape_tables()
+
+    # returns true if the html is valid and processable
+    def check_validity(self):
+        if 'An Error Occurred' in self.soup.text:
+            return False
+        return True
 
     def get_source_info(self):
         self.get_date_range()
@@ -28,6 +35,20 @@ class DataPage:
     # Empty function, needs to be implemented seperately for Lobbyists and Entities
     # This function does the actual work of scraping the tables. Calls a bunch of helpers
     def scrape_tables(self):
+        self.get_lobbying_activity()
+        self.get_campaign_contributions()
+        self.get_client_compensation()
+        #SALARIES?
+        #OPERATING EXPENSES?
+        #ENTERTAINMENT / ADDITIONAL EXPENSES?
+
+    def get_lobbying_activity(self):
+        pass
+
+    def get_campaign_contributions(self):
+        pass
+
+    def get_client_compensation(self):
         pass
 
     def get_header(self):
@@ -35,8 +56,7 @@ class DataPage:
         header = self.dfs[5][0:7].transpose() #Extract header table and orient it properly
         header.columns = header.iloc[0] #Pull the column names from the first row...
         header = header[1:] # ... and then drop that row
-        self.tables['Headers'].append(header)
-
+        self.tables['Headers'] = pd.concat([self.tables['Headers'], header])
 
     # This function adds the date range and entity / lobbyist name to each table
     def add_source(self):
@@ -63,17 +83,26 @@ class DataPage:
             print('Saving data to ' + file_path)
             dataframe.to_csv(file_path, mode ='a+',header=(not os.path.exists(file_path)), index=False)
 
+    # Helper function to replace all blocks of whitespace with a single space
+    def clean_entry(entry):
+        return re.sub("\s\s+", " ", entry)
 
 
 class LobbyistDataPage(DataPage):
     def __init__(self, html):
         DataPage.__init__(self, html)
 
-    def scrape_tables(self):
-        pass
-
     def get_source_name(self):
         self.source_name = self.tables['Headers']['Lobbyist name']
+
+    def get_lobbying_activity(self):
+        pass
+
+    def get_campaign_contributions(self):
+        pass
+
+    def get_client_compensation(self):
+        pass
 
 class EntityDataPage(DataPage):
     def __init__(self, html):
@@ -82,53 +111,22 @@ class EntityDataPage(DataPage):
     def get_source_name(self):
         self.source_name = self.tables['Headers']['Business name']
 
-    def scrape_tables(self):
-        for i in range(len(self.dfs)):
-            df_str = str(self.dfs[i])
-            #ACTIVITIES TABLES
-            if 'House / Senate' in df_str and len(self.dfs[i]) == 1:
-                self.get_activities(i)
+    def get_lobbying_activity(self):
+        pass
 
-            #CLIENT COMPENSATION
-            if 'Client Compensation' in df_str and len(self.dfs[i]) == 2:
-                self.get_compensation(i)
+    def get_campaign_contributions(self):
+        pass
 
-            #SALARIES
-            if 'Salaries' in df_str and len(self.dfs[i]) == 2:
-                self.get_salaries(i)
+    def get_client_compensation(self):
+        pass
 
 
-    def get_activities(self, i):
-        self.tables.setdefault('Activities', pd.DataFrame()) #Create table if it doesn't exist
-        client = str(self.dfs[i-1][0][0]).split('Client:')[1].strip()
-        lobbyist = self.dfs[i-2][0][0].split('Lobbyist:')[1].strip()
-        table = self.dfs[i+1][:-1]
-        table.insert(0, 'Client', client)
-        table.insert(0, 'Lobbyist', lobbyist)
-        table.insert(0, 'Date Range', self.date_range)
-        self.tables['Activities'] = pd.concat( [self.tables['Activities'], table])
 
-    def get_compensation(self, i):
-        self.tables.setdefault('Compensation', pd.DataFrame())
-        comp_str = self.dfs[i][0][1]
-        data = re.findall(r'[\w\s\.&,]+\s\$[\d,\.]+', comp_str[11:])
-        data = [d.split(" $") for d in data]
-        data = [[d[0], float(d[1].replace(',',''))] for d in data if len(d) == 2]
-        table = pd.DataFrame(data, columns = ['Name', 'Amount'])
-        self.tables['Compensation'] = pd.concat( [self.tables['Compensation'], table])
 
-    def get_salaries(self, i):
-        self.tables.setdefault('Salaries', pd.DataFrame())
-        table = self.dfs[i][:-1]
-        self.tables['Salaries'] = pd.concat( [self.tables['Salaries'], table])
 
-    # Helper function to replace all blocks of whitespace with a single space
-    def clean_entry(entry):
-        return re.sub("\s\s+", " ", entry)
 
-    # Getter function, mostly here for testing purposes
-    def fetch_tables(self):
-        return self.tables
+
+
 
 # Takes a list of html files, extracts the data, and saves them to disk
 def extract_and_save(html_list):
