@@ -32,8 +32,6 @@ class DataPage:
     def get_source_name():
         pass
 
-    # Empty function, needs to be implemented seperately for Lobbyists and Entities
-    # This function does the actual work of scraping the tables. Calls a bunch of helpers
     def scrape_tables(self):
         self.get_lobbying_activity()
         self.get_campaign_contributions()
@@ -42,9 +40,11 @@ class DataPage:
         #OPERATING EXPENSES?
         #ENTERTAINMENT / ADDITIONAL EXPENSES?
 
+    # Implemented seperately for lobbyists and entities
     def get_lobbying_activity(self):
         pass
 
+    # Implemented seperately for lobbyists and entities
     def get_campaign_contributions(self):
         pass
 
@@ -101,9 +101,6 @@ class LobbyistDataPage(DataPage):
     def get_campaign_contributions(self):
         pass
 
-    def get_client_compensation(self):
-        pass
-
 class EntityDataPage(DataPage):
     def __init__(self, html):
         DataPage.__init__(self,html)
@@ -115,9 +112,6 @@ class EntityDataPage(DataPage):
         pass
 
     def get_campaign_contributions(self):
-        pass
-
-    def get_client_compensation(self):
         pass
 
 
