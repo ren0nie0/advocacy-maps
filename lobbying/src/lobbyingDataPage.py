@@ -109,7 +109,29 @@ class EntityDataPage(DataPage):
         self.source_name = self.tables['Headers']['Business name']
 
     def get_lobbying_activity(self):
-        pass
+        def divide_chunks(some_list,chunk_size):
+            for i in range(0, len(some_list), chunk_size):
+                yield some_list[i:i+chunk_size]
+
+        columns = ['House/Senate','Bill Number or Agency Name','Bill Title or activity','Agent position','Amount','Direct business association']
+        self.tables['Activities'] = pd.DataFrame(columns=['Lobbyist','Client']+columns)
+        query = re.compile(r"(?<=Lobbyist: ).*?(?=\xa0\xa0\xa0\nTotal amount\n)",re.DOTALL)
+        activity_tables = re.findall(query,self.soup.text)
+        for table in activity_tables:
+            split_text=[text.strip() for text in table.split('\n') if text]
+
+            lobbyist = split_text[0]
+            client = split_text[2]
+            header_text = 'House / SenateBill Number or Agency NameBill title or activityAgent positionAmountDirect business association'
+            if header_text in split_text:
+                header_index = split_text.index(header_text)
+
+                cropped_text = [text for text in split_text[header_index+1:] if text]
+                x = list(divide_chunks(cropped_text, 6))
+                temp_df = pd.DataFrame(x,columns=columns)
+                temp_df['Lobbyist'] = lobbyist
+                temp_df['Client'] = client
+                self.tables['Activities'] = pd.concat([self.tables['Activities'], temp_df])
 
     def get_campaign_contributions(self):
         pass
