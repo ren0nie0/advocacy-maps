@@ -4,6 +4,10 @@ import requests
 from bs4 import BeautifulSoup as bs
 import re
 
+def divide_chunks(some_list,chunk_size):
+            for i in range(0, len(some_list), chunk_size):
+                yield some_list[i:i+chunk_size]
+
 class DataPage:
     def __init__(self, html):
         self.tables = {} # A dictionary that will hold all the tables as they are extracted
@@ -12,8 +16,10 @@ class DataPage:
 
         if self.check_validity():
             self.get_header()
-            self.get_source_info()
+            self.get_date_range()
+            self.get_source_name()
             self.scrape_tables()
+            #self.add_source()
 
     # returns true if the html is valid and processable
     def check_validity(self):
@@ -21,12 +27,18 @@ class DataPage:
             return False
         return True
 
-    def get_source_info(self):
-        self.get_date_range()
-        self.get_source_name()
+    #updates a table in the tables dictionary
+    #creates the table if it does not yet exist
+    def update_table(self, table_name, dataframe):
+        if table_name in self.tables.keys():
+            pd.concat([self.tables[table_name], dataframe])
+        else:
+            self.tables[table_name] = dataframe
+
 
     def get_date_range(self):
         self.date_range = self.dfs[4][0][2].split('period:  ')[1]
+
 
     # Implement seperately for lobbyists and entities
     def get_source_name():
@@ -49,14 +61,24 @@ class DataPage:
         pass
 
     def get_client_compensation(self):
-        pass
+        columns = ['Client Name','Amount']
+        query = re.compile(r"(?<=NameAmount).*?(?=Total salaries received)",re.DOTALL)
+        query_result = re.search(query, self.soup.text)
+        if not query_result:
+            return
+        compensation_table = query_result.group()
+        split_text=[line.strip() for line in compensation_table.split('\n') if line.strip()]
+        divided_text = list(divide_chunks(split_text, 2))
+        compensation_df = pd.DataFrame(divided_text,columns=columns)
+        self.update_table('Compensation', compensation_df)
 
+    # The one easy table. It's the same throughout time, extremely consistent, and pandas can find it easily
     def get_header(self):
-        self.tables['Headers'] = pd.DataFrame(columns=['Authorizing Officer name','Lobbyist name','Title','Business name','Address','City, state, zip code','Country','Agent type','Phone'])
-        header = self.dfs[5][0:7].transpose() #Extract header table and orient it properly
-        header.columns = header.iloc[0] #Pull the column names from the first row...
-        header = header[1:] # ... and then drop that row
-        self.tables['Headers'] = pd.concat([self.tables['Headers'], header])
+        columns =['Authorizing Officer name','Lobbyist name','Title','Business name','Address','City, state, zip code','Country','Agent type','Phone']
+        header_df = self.dfs[5][0:7].transpose() #Extract header table and orient it properly
+        header_df.columns = header_df.iloc[0] #Pull the column names from the first row...
+        header_df = header_df[1:] # ... and then drop that row
+        self.update_table('Headers', header_df)
 
     # This function adds the date range and entity / lobbyist name to each table
     def add_source(self):
@@ -96,10 +118,6 @@ class LobbyistDataPage(DataPage):
         self.source_name = self.tables['Headers']['Lobbyist name']
 
     def get_lobbying_activity(self):
-        def divide_chunks(some_list,chunk_size):
-            for i in range(0, len(some_list), chunk_size):
-                yield some_list[i:i+chunk_size]
-
         columns = ['House/Senate','Bill Number or Agency Name','Bill Title or activity','Agent position','Amount','Direct business association']
         self.tables['Activities'] = pd.DataFrame(columns=['Lobbyist','Client']+columns)
         query = re.compile(r"(?<=Client: ).*?(?=\xa0\xa0\xa0\nTotal amount\n)",re.DOTALL)
@@ -109,17 +127,17 @@ class LobbyistDataPage(DataPage):
 
             lobbyist = self.source_name[1]
             client = split_text[0]
-            
+
             header_text = 'House / SenateBill Number or Agency NameBill title or activityAgent positionAmountDirect business association'
             if header_text in split_text:
                 header_index = split_text.index(header_text)
 
                 cropped_text = [text for text in split_text[header_index+1:] if text]
-                x = list(divide_chunks(cropped_text, 6))
-                temp_df = pd.DataFrame(x,columns=columns)
-                temp_df['Lobbyist'] = lobbyist
-                temp_df['Client'] = client
-                self.tables['Activities'] = pd.concat([self.tables['Activities'], temp_df])
+                divided_text = list(divide_chunks(cropped_text, 6))
+                activity_df = pd.DataFrame(divided_text,columns=columns)
+                activity_df['Lobbyist'] = lobbyist
+                activity_df['Client'] = client
+                self.update_table('Activities', activity_df )
 
     def get_campaign_contributions(self):
         pass
@@ -132,12 +150,7 @@ class EntityDataPage(DataPage):
         self.source_name = self.tables['Headers']['Business name']
 
     def get_lobbying_activity(self):
-        def divide_chunks(some_list,chunk_size):
-            for i in range(0, len(some_list), chunk_size):
-                yield some_list[i:i+chunk_size]
-
         columns = ['House/Senate','Bill Number or Agency Name','Bill Title or activity','Agent position','Amount','Direct business association']
-        self.tables['Activities'] = pd.DataFrame(columns=['Lobbyist','Client']+columns)
         query = re.compile(r"(?<=Lobbyist: ).*?(?=\xa0\xa0\xa0\nTotal amount\n)",re.DOTALL)
         activity_tables = re.findall(query,self.soup.text)
         for table in activity_tables:
@@ -150,11 +163,11 @@ class EntityDataPage(DataPage):
                 header_index = split_text.index(header_text)
 
                 cropped_text = [text for text in split_text[header_index+1:] if text]
-                x = list(divide_chunks(cropped_text, 6))
-                temp_df = pd.DataFrame(x,columns=columns)
-                temp_df['Lobbyist'] = lobbyist
-                temp_df['Client'] = client
-                self.tables['Activities'] = pd.concat([self.tables['Activities'], temp_df])
+                divided_text = list(divide_chunks(cropped_text, 6))
+                activity_df = pd.DataFrame(divided_text,columns=columns)
+                activity_df['Lobbyist'] = lobbyist
+                activity_df['Client'] = client
+                self.update_table('Activities', activity_df )
 
     def get_campaign_contributions(self):
         pass
