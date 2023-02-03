@@ -27,6 +27,10 @@ class DataPage:
             return False
         return True
 
+    ## TODO: implement this??
+    def pull_table(self, table_name, regex_query, columns):
+        query_result = re.findall(regex_query,self.soup.text)
+
     #updates a table in the tables dictionary
     #creates the table if it does not yet exist
     def update_table(self, table_name, dataframe):
@@ -58,16 +62,7 @@ class DataPage:
 
     # Implemented seperately for lobbyists and entities
     def get_campaign_contributions(self):
-        columns = ['Date','Recipient name','Office sought','Amount']
-        query = re.compile(r"(?<=DateRecipient nameOffice soughtAmount).*?(?=\xa0\xa0Total contributions)",re.DOTALL)
-        query_result = re.search(query, self.soup.text)
-        if not query_result:
-            return
-        contributions_table = query_result.group()
-        split_text=[line.strip() for line in contributions_table.split('\n') if line.strip()]
-        divided_text = list(divide_chunks(split_text, 4))
-        contributions_df = pd.DataFrame(divided_text, columns=columns)
-        self.update_table('Campaign Contributions', contributions_df)
+        pass
 
     def get_client_compensation(self):
         columns = ['Client Name','Amount']
@@ -149,7 +144,16 @@ class LobbyistDataPage(DataPage):
                 self.update_table('Activities', activity_df )
 
     def get_campaign_contributions(self):
-        pass
+        columns = ['Date','Recipient name','Office sought','Amount']
+        query = re.compile(r"(?<=DateRecipient nameOffice soughtAmount).*?(?=\xa0\xa0Total contributions)",re.DOTALL)
+        query_result = re.search(query, self.soup.text)
+        if not query_result:
+            return
+        contributions_table = query_result.group()
+        split_text=[line.strip() for line in contributions_table.split('\n') if line.strip()]
+        divided_text = list(divide_chunks(split_text, 4))
+        contributions_df = pd.DataFrame(divided_text, columns=columns)
+        self.update_table('Campaign Contributions', contributions_df)
 
 class EntityDataPage(DataPage):
     def __init__(self, html):
