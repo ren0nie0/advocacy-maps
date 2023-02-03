@@ -75,3 +75,6 @@ lobbying/notebooks/errorpage.html
 lobbying/notebooks/indivlobbyist.html
 lobbying/data/entities.csv
 lobbying/data/compensation.csv
+
+# .pyc files are binary caches and thus not intended to be committed
+*.pyc

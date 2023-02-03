@@ -27,28 +27,6 @@ class DataPage:
             return False
         return True
 
-    ## TODO: implement this??
-    # Will this even work? Avtivity tables are complicated!
-    # def pull_single_table(self, table_name, regex_query, columns):
-    #     query_result = re.search(regex_query,self.soup.text)
-    #     if not query_result:
-    #         return
-    #     table = query_result.group()
-    #     split_table = [line.strip() for line in table.split('\n') if line.strip()]
-    #     divided_list = list(divide_chunks(split_table, len(columns)))
-    #     table_df = pd.DataFrame(divided_list, columns=columns)
-    #     self.updatE_table(table_name, table_df)
-
-    # def pull_all_tables(self, table_name, regex_query, columns):
-    #     query_results = re.findall(regex_query,self.soup.text)
-    #     if not query_results:
-    #         return
-    #     for table in query_results:
-    #         split_table = [line.strip() for line in table.split('\n') if line.strip()]
-    #     pass
-
-
-
     #updates a table in the tables dictionary
     #creates the table if it does not yet exist
     def update_table(self, table_name, dataframe):
@@ -78,9 +56,21 @@ class DataPage:
     def get_lobbying_activity(self):
         pass
 
-    # Implemented seperately for lobbyists and entities
+    # Implemented seperately for lobbyists and entities??
     def get_campaign_contributions(self):
-        pass
+        columns = ['Date','Recipient name','Office sought','Amount']
+        header = r"DateRecipient nameOffice soughtAmount"
+        footer = r"\xa0\xa0Total contributions"
+        query_string = fr"(?<={header}).*?(?={footer})"
+        query = re.compile(query_string,re.DOTALL)
+        query_results = re.findall(query, self.soup.text)
+        if not query_results:
+            return
+        for query_result in query_results:
+            split_text=[line.strip() for line in query_result.split('\n') if line.strip()]
+            divided_text = list(divide_chunks(split_text, 4))
+            contributions_df = pd.DataFrame(divided_text, columns=columns)
+            self.update_table('Campaign Contributions', contributions_df)
 
     def get_client_compensation(self):
         columns = ['Client Name','Amount']
@@ -162,15 +152,7 @@ class LobbyistDataPage(DataPage):
                 self.update_table('Activities', activity_df )
 
     def get_campaign_contributions(self):
-        columns = ['Date','Recipient name','Office sought','Amount']
-        query = re.compile(r"(?<=DateRecipient nameOffice soughtAmount).*?(?=\xa0\xa0Total contributions)",re.DOTALL)
-        query_result = re.search(query, self.soup.text)
-        if not query_result: return
-        contributions_table = query_result.group()
-        split_text=[line.strip() for line in contributions_table.split('\n') if line.strip()]
-        divided_text = list(divide_chunks(split_text, 4))
-        contributions_df = pd.DataFrame(divided_text, columns=columns)
-        self.update_table('Campaign Contributions', contributions_df)
+        pass
 
 class EntityDataPage(DataPage):
     def __init__(self, html):
@@ -200,15 +182,14 @@ class EntityDataPage(DataPage):
                 self.update_table('Activities', activity_df )
 
     def get_campaign_contributions(self):
-        columns = ['Date','Recipient name','Office sought','Amount']
-        query = re.compile(r"(?<=DateRecipient nameOffice soughtAmount).*?(?=\xa0\xa0Total contributions)",re.DOTALL)
-        query_results = re.findall(query, self.soup.text)
-        if not query_results: return
-        for contributions_table in query_results:
-            split_text=[line.strip() for line in contributions_table.split('\n') if line.strip()]
-            divided_text = list(divide_chunks(split_text, 4))
-            contributions_df = pd.DataFrame(divided_text, columns=columns)
-            self.update_table('Campaign Contributions', contributions_df)
+        pass
+
+
+
+
+
+
+
 
 
 # Takes a list of html files, extracts the data, and saves them to disk
