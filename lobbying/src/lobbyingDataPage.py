@@ -19,6 +19,7 @@ class DataPage:
             self.get_date_range()
             self.get_source_name()
             self.scrape_tables()
+            #self.add_source()
 
     # returns true if the html is valid and processable
     def check_validity(self):
@@ -35,9 +36,9 @@ class DataPage:
             self.tables[table_name] = dataframe
 
 
-
     def get_date_range(self):
         self.date_range = self.dfs[4][0][2].split('period:  ')[1]
+
 
     # Implement seperately for lobbyists and entities
     def get_source_name():
@@ -60,15 +61,24 @@ class DataPage:
         pass
 
     def get_client_compensation(self):
-        pass
+        columns = ['Client Name','Amount']
+        query = re.compile(r"(?<=NameAmount).*?(?=Total salaries received)",re.DOTALL)
+        query_result = re.search(query, self.soup.text)
+        if not query_result:
+            return
+        compensation_table = query_result.group()
+        split_text=[line.strip() for line in compensation_table.split('\n') if line.strip()]
+        divided_text = list(divide_chunks(split_text, 2))
+        compensation_df = pd.DataFrame(divided_text,columns=columns)
+        self.update_table('Compensation', compensation_df)
 
     # The one easy table. It's the same throughout time, extremely consistent, and pandas can find it easily
     def get_header(self):
         columns =['Authorizing Officer name','Lobbyist name','Title','Business name','Address','City, state, zip code','Country','Agent type','Phone']
-        header = self.dfs[5][0:7].transpose() #Extract header table and orient it properly
-        header.columns = header.iloc[0] #Pull the column names from the first row...
-        header = header[1:] # ... and then drop that row
-        self.update_table('Headers', header)
+        header_df = self.dfs[5][0:7].transpose() #Extract header table and orient it properly
+        header_df.columns = header_df.iloc[0] #Pull the column names from the first row...
+        header_df = header_df[1:] # ... and then drop that row
+        self.update_table('Headers', header_df)
 
     # This function adds the date range and entity / lobbyist name to each table
     def add_source(self):
