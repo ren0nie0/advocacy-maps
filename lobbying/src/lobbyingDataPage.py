@@ -28,8 +28,26 @@ class DataPage:
         return True
 
     ## TODO: implement this??
-    def pull_table(self, table_name, regex_query, columns):
-        query_result = re.findall(regex_query,self.soup.text)
+    # Will this even work? Avtivity tables are complicated!
+    # def pull_single_table(self, table_name, regex_query, columns):
+    #     query_result = re.search(regex_query,self.soup.text)
+    #     if not query_result:
+    #         return
+    #     table = query_result.group()
+    #     split_table = [line.strip() for line in table.split('\n') if line.strip()]
+    #     divided_list = list(divide_chunks(split_table, len(columns)))
+    #     table_df = pd.DataFrame(divided_list, columns=columns)
+    #     self.updatE_table(table_name, table_df)
+
+    # def pull_all_tables(self, table_name, regex_query, columns):
+    #     query_results = re.findall(regex_query,self.soup.text)
+    #     if not query_results:
+    #         return
+    #     for table in query_results:
+    #         split_table = [line.strip() for line in table.split('\n') if line.strip()]
+    #     pass
+
+
 
     #updates a table in the tables dictionary
     #creates the table if it does not yet exist
@@ -147,8 +165,7 @@ class LobbyistDataPage(DataPage):
         columns = ['Date','Recipient name','Office sought','Amount']
         query = re.compile(r"(?<=DateRecipient nameOffice soughtAmount).*?(?=\xa0\xa0Total contributions)",re.DOTALL)
         query_result = re.search(query, self.soup.text)
-        if not query_result:
-            return
+        if not query_result: return
         contributions_table = query_result.group()
         split_text=[line.strip() for line in contributions_table.split('\n') if line.strip()]
         divided_text = list(divide_chunks(split_text, 4))
@@ -183,14 +200,15 @@ class EntityDataPage(DataPage):
                 self.update_table('Activities', activity_df )
 
     def get_campaign_contributions(self):
-        pass
-
-
-
-
-
-
-
+        columns = ['Date','Recipient name','Office sought','Amount']
+        query = re.compile(r"(?<=DateRecipient nameOffice soughtAmount).*?(?=\xa0\xa0Total contributions)",re.DOTALL)
+        query_results = re.findall(query, self.soup.text)
+        if not query_results: return
+        for contributions_table in query_results:
+            split_text=[line.strip() for line in contributions_table.split('\n') if line.strip()]
+            divided_text = list(divide_chunks(split_text, 4))
+            contributions_df = pd.DataFrame(divided_text, columns=columns)
+            self.update_table('Campaign Contributions', contributions_df)
 
 
 # Takes a list of html files, extracts the data, and saves them to disk
