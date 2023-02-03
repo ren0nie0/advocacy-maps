@@ -35,10 +35,8 @@ class DataPage:
         else:
             self.tables[table_name] = dataframe
 
-
     def get_date_range(self):
         self.date_range = self.dfs[4][0][2].split('period:  ')[1]
-
 
     # Implement seperately for lobbyists and entities
     def get_source_name():
