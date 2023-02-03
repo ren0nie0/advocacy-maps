@@ -58,7 +58,16 @@ class DataPage:
 
     # Implemented seperately for lobbyists and entities
     def get_campaign_contributions(self):
-        pass
+        columns = ['Date','Recipient name','Office sought','Amount']
+        query = re.compile(r"(?<=DateRecipient nameOffice soughtAmount).*?(?=\xa0\xa0Total contributions)",re.DOTALL)
+        query_result = re.search(query, self.soup.text)
+        if not query_result:
+            return
+        contributions_table = query_result.group()
+        split_text=[line.strip() for line in contributions_table.split('\n') if line.strip()]
+        divided_text = list(divide_chunks(split_text, 4))
+        contributions_df = pd.DataFrame(divided_text, columns=columns)
+        self.update_table('Campaign Contributions', contributions_df)
 
     def get_client_compensation(self):
         columns = ['Client Name','Amount']
@@ -70,7 +79,7 @@ class DataPage:
         split_text=[line.strip() for line in compensation_table.split('\n') if line.strip()]
         divided_text = list(divide_chunks(split_text, 2))
         compensation_df = pd.DataFrame(divided_text,columns=columns)
-        self.update_table('Compensation', compensation_df)
+        self.update_table('Client Compensation', compensation_df)
 
     # The one easy table. It's the same throughout time, extremely consistent, and pandas can find it easily
     def get_header(self):
