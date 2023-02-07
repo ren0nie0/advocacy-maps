@@ -36,7 +36,6 @@ class DataPage:
         if not string:
             string = self.soup.text
         query_string = fr"(?<={table_start}).*?(?={table_end})"
-
         query = re.compile(query_string,re.DOTALL)
         query_results = re.findall(query, string)
         return query_results
@@ -54,7 +53,7 @@ class DataPage:
         query_string = r"(?<=period:).*?(\d\d\/\d\d\/\d\d\d\d - \d\d\/\d\d\/\d\d\d\d)"
         query = re.compile(query_string,re.DOTALL)
         query_results = re.search(query, self.soup.text)
-
+        self.date_range = query_results.group(1)
 
     # Implement seperately for lobbyists and entities
     def get_source_name():
@@ -68,7 +67,7 @@ class DataPage:
         #OPERATING EXPENSES?
         #ENTERTAINMENT / ADDITIONAL EXPENSES?
 
-    # Implemented seperately for lobbyists and entities
+    #wide_query is passed from the entity and individual versions of this method
     def get_lobbying_activity(self, wide_query):
         table_name = 'Activities'
         columns = ['House / Senate','Bill Number or Agency Name','Bill title or activity','Agent position','Amount','Direct business association']
@@ -106,10 +105,11 @@ class DataPage:
     # The one easy table. It's the same throughout time, extremely consistent, and pandas can find it easily
     def get_header(self):
         columns =['Authorizing Officer name','Lobbyist name','Title','Business name','Address','City, state, zip code','Country','Agent type','Phone']
+        table_name = 'Header'
         header_df = self.dfs[5][0:7].transpose() #Extract header table and orient it properly
         header_df.columns = header_df.iloc[0] #Pull the column names from the first row...
         header_df = header_df[1:] # ... and then drop that row
-        self.update_table('Headers', header_df)
+        self.update_table('Header', header_df)
 
     # This function adds the date range and entity / lobbyist name to each table
     def add_source(self):
