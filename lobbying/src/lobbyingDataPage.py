@@ -4,15 +4,20 @@ import requests
 from bs4 import BeautifulSoup as bs
 import re
 
-def divide_chunks(some_list,chunk_size):
+def create_table(query_result, columns):
+    def divide_chunks(some_list,chunk_size):
             for i in range(0, len(some_list), chunk_size):
                 yield some_list[i:i+chunk_size]
+    split_text=[line.strip() for line in query_result.split('\n') if line.strip()]
+    divided_text = list(divide_chunks(split_text, len(columns)))
+    table_df = pd.DataFrame(divided_text, columns=columns)
+    return table_df
 
 class DataPage:
     def __init__(self, html):
         self.tables = {} # A dictionary that will hold all the tables as they are extracted
         self.soup = bs(html, 'html.parser')
-        self.dfs = pd.read_html(html)
+        #self.dfs = pd.read_html(html)
 
         if self.check_validity():
             self.get_header()
@@ -27,6 +32,14 @@ class DataPage:
             return False
         return True
 
+    def query_page(self, table_start, table_end, string=None):
+        if not string:
+            string = self.soup.text
+        query_string = fr"(?<={table_start}).*?(?={table_end})"
+        query = re.compile(query_string,re.DOTALL)
+        query_results = re.findall(query, string)
+        return query_results
+
     #updates a table in the tables dictionary
     #creates the table if it does not yet exist
     def update_table(self, table_name, dataframe):
@@ -35,10 +48,12 @@ class DataPage:
         else:
             self.tables[table_name] = dataframe
 
-
     def get_date_range(self):
-        self.date_range = self.dfs[4][0][2].split('period:  ')[1]
-
+        #self.date_range = self.dfs[4][0][2].split('period:  ')[1]
+        query_string = r"(?<=period:).*?(\d\d\/\d\d\/\d\d\d\d - \d\d\/\d\d\/\d\d\d\d)"
+        query = re.compile(query_string,re.DOTALL)
+        query_results = re.search(query, self.soup.text)
+        self.date_range = query_results.group(1)
 
     # Implement seperately for lobbyists and entities
     def get_source_name():
@@ -53,36 +68,37 @@ class DataPage:
         #ENTERTAINMENT / ADDITIONAL EXPENSES?
 
     # Implemented seperately for lobbyists and entities
-    def get_lobbying_activity(self):
+    def get_lobbying_activity(self, wide_query):
+        table_name = 'Activities'
+        columns = ['House / Senate','Bill Number or Agency Name','Bill title or activity','Agent position','Amount','Direct business association']
+        table_start = r"".join(columns)
+        table_end = r'\xa0\xa0\xa0\nTotal'
+        #our first query has a wider scope so we can pull the client and lobbyist name
+        query_results = self.query_page(wide_query, r' amount\n')
+        for query_result in query_results:
+            activities_table = self.query_page(table_start, table_end, query_result)[0]
+            anon_activities_df = create_table(activities_table, columns)
+            activities_df = self.add_identifiers_to_activities_table(query_result, anon_activities_df)
+            self.update_table(table_name,activities_df)
+
+    #implemented seperately for lobbyists and entities
+    def add_identifiers_to_activities_table(self, query_result, dataframe):
         pass
 
-    # Implemented seperately for lobbyists and entities??
+    # Implemented seperately for lobbyists and entities
+    # the sole difference currently is the columns. could we abstract that more?
     def get_campaign_contributions(self):
-        columns = ['Date','Recipient name','Office sought','Amount']
-        header = r"DateRecipient nameOffice soughtAmount"
-        footer = r"\xa0\xa0Total contributions"
-        query_string = fr"(?<={header}).*?(?={footer})"
-        query = re.compile(query_string,re.DOTALL)
-        query_results = re.findall(query, self.soup.text)
-        if not query_results:
-            return
-        for query_result in query_results:
-            split_text=[line.strip() for line in query_result.split('\n') if line.strip()]
-            divided_text = list(divide_chunks(split_text, 4))
-            contributions_df = pd.DataFrame(divided_text, columns=columns)
-            self.update_table('Campaign Contributions', contributions_df)
+        pass
 
     def get_client_compensation(self):
+        table_name = 'Client Compensation'
         columns = ['Client Name','Amount']
-        query = re.compile(r"(?<=NameAmount).*?(?=Total salaries received)",re.DOTALL)
-        query_result = re.search(query, self.soup.text)
-        if not query_result:
-            return
-        compensation_table = query_result.group()
-        split_text=[line.strip() for line in compensation_table.split('\n') if line.strip()]
-        divided_text = list(divide_chunks(split_text, 2))
-        compensation_df = pd.DataFrame(divided_text,columns=columns)
-        self.update_table('Client Compensation', compensation_df)
+        table_start = r"".join(columns)
+        table_end = r'Total salaries received'
+        query_results = self.query_page(table_start, table_end)
+        for query_result in query_results:
+            compensation_df = create_table(query_result, columns)
+            self.update_table(table_name, compensation_df)
 
     # The one easy table. It's the same throughout time, extremely consistent, and pandas can find it easily
     def get_header(self):
@@ -97,6 +113,7 @@ class DataPage:
         for table in self.tables:
             table['Date Range'] = self.date_range
             table['Source'] = self.source_name
+
 
     # Attempts to save each table from the page to disk
     def save(self):
@@ -121,94 +138,79 @@ class DataPage:
     def clean_entry(entry):
         return re.sub("\s\s+", " ", entry)
 
-
 class LobbyistDataPage(DataPage):
     def __init__(self, html):
         DataPage.__init__(self, html)
 
     def get_source_name(self):
-        self.source_name = self.tables['Headers']['Lobbyist name']
-
-    def get_lobbying_activity(self):
-        columns = ['House/Senate','Bill Number or Agency Name','Bill Title or activity','Agent position','Amount','Direct business association']
-        self.tables['Activities'] = pd.DataFrame(columns=['Lobbyist','Client']+columns)
-        query = re.compile(r"(?<=Client: ).*?(?=\xa0\xa0\xa0\nTotal amount\n)",re.DOTALL)
-        activity_tables = re.findall(query,self.soup.text)
-        for table in activity_tables:
-            split_text=[text.strip() for text in table.split('\n') if text]
-
-            lobbyist = self.source_name[1]
-            client = split_text[0]
-
-            header_text = 'House / SenateBill Number or Agency NameBill title or activityAgent positionAmountDirect business association'
-            if header_text in split_text:
-                header_index = split_text.index(header_text)
-
-                cropped_text = [text for text in split_text[header_index+1:] if text]
-                divided_text = list(divide_chunks(cropped_text, 6))
-                activity_df = pd.DataFrame(divided_text,columns=columns)
-                activity_df['Lobbyist'] = lobbyist
-                activity_df['Client'] = client
-                self.update_table('Activities', activity_df )
+        self.source_name = self.tables['Headers']['Lobbyist name'][1]
 
     def get_campaign_contributions(self):
-        pass
+        table_name = 'Campaign Contributions'
+        columns = ['Date','Recipient name','Office sought','Amount']
+        table_start = r"".join(columns)
+        table_end = "\xa0\xa0Total contributions"
+        query_results = self.query_page(table_start, table_end)
+        for query_result in query_results:
+            contributions_df = create_table(query_result, columns)
+            self.update_table(table_name, contributions_df)
+
+    def get_lobbying_activity(self):
+        wide_query = r'Client: '
+        super().get_lobbying_activity(wide_query)
+
+    def add_identifiers_to_activities_table(self, query_result, dataframe):
+        dataframe['Client'] = query_result[0].split('\n')[0]
+        dataframe['Lobbyist'] = self.source_name
+        return dataframe
 
 class EntityDataPage(DataPage):
     def __init__(self, html):
         DataPage.__init__(self,html)
 
     def get_source_name(self):
-        self.source_name = self.tables['Headers']['Business name']
+        self.source_name = self.tables['Headers']['Business name'][1]
 
     def get_lobbying_activity(self):
-        columns = ['House/Senate','Bill Number or Agency Name','Bill Title or activity','Agent position','Amount','Direct business association']
-        query = re.compile(r"(?<=Lobbyist: ).*?(?=\xa0\xa0\xa0\nTotal amount\n)",re.DOTALL)
-        activity_tables = re.findall(query,self.soup.text)
-        for table in activity_tables:
-            split_text=[text.strip() for text in table.split('\n') if text]
+        wide_query = r'Lobbyist: '
+        super().get_lobbying_activity(wide_query)
 
-            lobbyist = split_text[0]
-            client = split_text[2]
-            header_text = 'House / SenateBill Number or Agency NameBill title or activityAgent positionAmountDirect business association'
-            if header_text in split_text:
-                header_index = split_text.index(header_text)
-
-                cropped_text = [text for text in split_text[header_index+1:] if text]
-                divided_text = list(divide_chunks(cropped_text, 6))
-                activity_df = pd.DataFrame(divided_text,columns=columns)
-                activity_df['Lobbyist'] = lobbyist
-                activity_df['Client'] = client
-                self.update_table('Activities', activity_df )
+    def add_identifiers_to_activities_table(self, query_result, dataframe):
+        dataframe['Client'] = query_result.split('\n')[0]
+        dataframe['Lobbyist'] = query_result.split('\n')[2]
+        return dataframe
 
     def get_campaign_contributions(self):
-        pass
+        table_name = 'Campaign Contributions'
+        columns = ['Date','Lobbyist name','Recipient name','Office sought','Amount']
+        table_start = "".join(columns)
+        table_end = "\xa0\xa0Total contributions"
+        query_results = self.query_page(table_start, table_end)
+        for query_result in query_results:
+            contributions_df = create_table(query_result, columns)
+            self.update_table(table_name, contributions_df)
 
+def convert_html_list(html_list):
+    page_list = []
+    for i, html in enumerate(html_list):
+        print(f'converting html index {i} into data page')
+        if 'Lobbyist Entity' in str(html):
+            page_list.append(EntityDataPage(html))
+        else:
+            page_list.append(LobbyistDataPage(html))
+    return page_list
 
-
-
-
-
-
-
-
-# Takes a list of html files, extracts the data, and saves them to disk
 def extract_and_save(html_list):
-    ## TODO: Add check for entity vs lobbyist
-    #for html in html_list:
-        #LobbyingDataPage(html).save()
-    for i in range(len(html_list)):
-        print("Saving "+str(i))
-        DataPage(html_list[i]).save()
+    page_list = convert_html_list(html_list)
+    for page in page_list:
+        page.save()
 
-# Downloads html from a url
 def pull_data(url):
     headers={"User-Agent": "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"}
     result = requests.get(url, headers=headers)
     result.raise_for_status()
     return result.content
 
-# Downloads a list of html pages from a list of url's
 def download_html_list(url_list):
     html_list = []
     for url in url_list:
@@ -216,8 +218,6 @@ def download_html_list(url_list):
         html_list.append(pull_data(url))
     return html_list
 
-# Takes a list of URL's, downloads them, processes them, and saves them to disk
 def save_data_from_url_list(url_list):
     disclosure_links = extract_and_save(download_html_list(url_list))
     html_list = download_html_list(disclosure_links)
-
