@@ -36,6 +36,7 @@ class DataPage:
         if not string:
             string = self.soup.text
         query_string = fr"(?<={table_start}).*?(?={table_end})"
+
         query = re.compile(query_string,re.DOTALL)
         query_results = re.findall(query, string)
         return query_results
@@ -53,7 +54,7 @@ class DataPage:
         query_string = r"(?<=period:).*?(\d\d\/\d\d\/\d\d\d\d - \d\d\/\d\d\/\d\d\d\d)"
         query = re.compile(query_string,re.DOTALL)
         query_results = re.search(query, self.soup.text)
-        self.date_range = query_results.group(1)
+
 
     # Implement seperately for lobbyists and entities
     def get_source_name():
@@ -77,6 +78,7 @@ class DataPage:
         query_results = self.query_page(wide_query, r' amount\n')
         for query_result in query_results:
             activities_table = self.query_page(table_start, table_end, query_result)[0]
+
             anon_activities_df = create_table(activities_table, columns)
             activities_df = self.add_identifiers_to_activities_table(query_result, anon_activities_df)
             self.update_table(table_name,activities_df)
@@ -96,6 +98,7 @@ class DataPage:
         table_start = r"".join(columns)
         table_end = r'Total salaries received'
         query_results = self.query_page(table_start, table_end)
+
         for query_result in query_results:
             compensation_df = create_table(query_result, columns)
             self.update_table(table_name, compensation_df)
@@ -113,7 +116,6 @@ class DataPage:
         for table in self.tables:
             table['Date Range'] = self.date_range
             table['Source'] = self.source_name
-
 
     # Attempts to save each table from the page to disk
     def save(self):
@@ -151,6 +153,7 @@ class LobbyistDataPage(DataPage):
         table_start = r"".join(columns)
         table_end = "\xa0\xa0Total contributions"
         query_results = self.query_page(table_start, table_end)
+
         for query_result in query_results:
             contributions_df = create_table(query_result, columns)
             self.update_table(table_name, contributions_df)
@@ -186,6 +189,7 @@ class EntityDataPage(DataPage):
         table_start = "".join(columns)
         table_end = "\xa0\xa0Total contributions"
         query_results = self.query_page(table_start, table_end)
+
         for query_result in query_results:
             contributions_df = create_table(query_result, columns)
             self.update_table(table_name, contributions_df)
