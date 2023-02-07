@@ -4,6 +4,11 @@ import requests
 from bs4 import BeautifulSoup as bs
 import re
 
+#supported save types:
+# csv
+#
+save_type = 'csv'
+
 def create_table(query_result, columns):
     def divide_chunks(some_list,chunk_size):
             for i in range(0, len(some_list), chunk_size):
@@ -49,7 +54,6 @@ class DataPage:
             self.tables[table_name] = dataframe
 
     def get_date_range(self):
-        #self.date_range = self.dfs[4][0][2].split('period:  ')[1]
         query_string = r"(?<=period:).*?(\d\d\/\d\d\/\d\d\d\d - \d\d\/\d\d\/\d\d\d\d)"
         query = re.compile(query_string,re.DOTALL)
         query_results = re.search(query, self.soup.text)
@@ -97,7 +101,6 @@ class DataPage:
         table_start = r"".join(columns)
         table_end = r'Total salaries received'
         query_results = self.query_page(table_start, table_end)
-
         for query_result in query_results:
             compensation_df = create_table(query_result, columns)
             self.update_table(table_name, compensation_df)
@@ -109,7 +112,7 @@ class DataPage:
         header_df = self.dfs[5][0:7].transpose() #Extract header table and orient it properly
         header_df.columns = header_df.iloc[0] #Pull the column names from the first row...
         header_df = header_df[1:] # ... and then drop that row
-        self.update_table('Header', header_df)
+        self.update_table(table_name, header_df)
 
     # This function adds the date range and entity / lobbyist name to each table
     def add_source(self):
@@ -119,10 +122,13 @@ class DataPage:
 
     # Attempts to save each table from the page to disk
     def save(self):
-        for table in self.tables.keys():
-            self.write_data(f'lobbying\data\{table.replace(" ","_").lower()}.csv', self.tables[table])
+        root_directory = "lobbying\data"
+        match save_type:
+            case 'csv':
+                for table in self.tables.keys():
+                    self.write_data_to_csv(f'{root_directory}\{table.replace(" ","_").lower()}.csv', self.tables[table])
 
-    def write_data(self, file_path, dataframe):
+    def write_data_to_csv(self, file_path, dataframe):
         write = True
         #if os.path.exists(file_path):
         with open(file_path, mode = 'a', encoding = 'utf-8') as f:
