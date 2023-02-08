@@ -221,6 +221,7 @@ class LobbyistDataPage(DataPage):
         query_results = self.query_page(table_start, table_end)
         for query_result in query_results:
             contributions_df = create_table(query_result, columns)
+            contributions_df['Lobbyist name'] = self.source_name
             self.update_table(table_name, contributions_df)
 
 
