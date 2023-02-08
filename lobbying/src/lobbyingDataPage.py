@@ -1,8 +1,31 @@
 import os
+import sys
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup as bs
 import re
+import psycopg2
+
+#supported save types:
+# csv
+#
+save_type = 'csv'
+params_dict = {
+    'host'      : 'localhost',
+    'database'  : 'maple_lobbying',
+    'user'      : 'geekc',
+    'password'  : 'asdf'
+}
+
+def connect(params_dict):
+    conn = None;
+    try:
+        print("Connecting to PostgreSQL database...")
+        conn = psycopg2.connect(**params_dict)
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+        sys.exit(1)
+    print("Connection successful")
 
 def create_table(query_result, columns):
     def divide_chunks(some_list,chunk_size):
