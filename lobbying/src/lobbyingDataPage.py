@@ -5,6 +5,11 @@ from bs4 import BeautifulSoup as bs
 import re
 
 
+#supported save types:
+# csv
+#
+save_type = 'csv'
+
 def create_table(query_result, columns):
     def divide_chunks(some_list,chunk_size):
             for i in range(0, len(some_list), chunk_size):
@@ -91,6 +96,23 @@ class DataPage:
         else:
             self.tables[table_name] = dataframe
 
+    def get_date_range(self):
+        query_string = r"(?<=period:).*?(\d\d\/\d\d\/\d\d\d\d - \d\d\/\d\d\/\d\d\d\d)"
+        query = re.compile(query_string,re.DOTALL)
+        query_results = re.search(query, self.soup.text)
+        self.date_range = query_results.group(1)
+
+    # Implement seperately for lobbyists and entities
+    def get_source_name():
+        pass
+
+    def scrape_tables(self):
+        self.get_lobbying_activity()
+        self.get_campaign_contributions()
+        self.get_client_compensation()
+        #SALARIES?
+        #OPERATING EXPENSES?
+        #ENTERTAINMENT / ADDITIONAL EXPENSES?
 
     def get_lobbying_activity(self):
         table_name = 'Activities'
@@ -131,6 +153,16 @@ class DataPage:
             self.update_table(table_name, compensation_df)
 
 
+    # The one easy table. It's the same throughout time, extremely consistent, and pandas can find it easily
+    def get_header(self):
+        columns =['Authorizing Officer name','Lobbyist name','Title','Business name','Address','City, state, zip code','Country','Agent type','Phone']
+        table_name = 'Header'
+        header_df = self.dfs[5][0:7].transpose() #Extract header table and orient it properly
+        header_df.columns = header_df.iloc[0] #Pull the column names from the first row...
+        header_df = header_df[1:] # ... and then drop that row
+        self.update_table(table_name, header_df)
+
+
     # This function adds the date range and entity / lobbyist name to each table
     def add_source(self):
         for table in self.tables:
@@ -141,10 +173,13 @@ class DataPage:
 
     # Attempts to save each table from the page to disk
     def save(self):
-        for table in self.tables.keys():
-            self.write_data(f'lobbying\data\{table.replace(" ","_").lower()}.csv', self.tables[table])
+        root_directory = "lobbying\data"
+        match save_type:
+            case 'csv':
+                for table in self.tables.keys():
+                    self.write_data_to_csv(f'{root_directory}\{table.replace(" ","_").lower()}.csv', self.tables[table])
 
-    def write_data(self, file_path, dataframe):
+    def write_data_to_csv(self, file_path, dataframe):
         write = True
         #if os.path.exists(file_path):
         with open(file_path, mode = 'a', encoding = 'utf-8') as f:
