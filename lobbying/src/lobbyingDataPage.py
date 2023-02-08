@@ -173,7 +173,7 @@ class DataPage:
     def get_client_compensation(self):
         table_name = 'Client Compensation'
         columns = ['Client Name','Amount']
-        table_start = r"".join(columns)
+        table_start = 'NameAmount'
         table_end = r'Total salaries received'
 
         query_results = self.query_page(table_start, table_end)
