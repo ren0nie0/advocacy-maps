@@ -1,13 +1,34 @@
 import os
+import sys
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup as bs
 import re
+import psycopg2
+import psycopg2.extras as extras
+import numpy as np
+
+#supported save types:
+# csv
+# psql
+save_type = 'csv'
+params_dict = {
+    'host'      : 'localhost',
+    'port'      : '5432',
+    'database'  : 'maple_lobbying',
+    'user'      : 'geekc',
+    'password'  : 'asdf'
+}
+DEBUG = True
+
+def get_conn():
+    conn = psycopg2.connect(**params_dict)
+    return conn
 
 
 #supported save types:
 # csv
-#
+# psql
 save_type = 'csv'
 
 def create_table(query_result, columns):
@@ -24,6 +45,7 @@ class DataPage:
     table_columns = {}
     activities_query = ""
     def __init__(self, html):
+        if DEBUG is True: self.html = html
         self.tables = {} # A dictionary that will hold all the tables as they are extracted
         self.soup = bs(html, 'html.parser')
         self.dfs = pd.read_html(html)
@@ -169,12 +191,15 @@ class DataPage:
 
 
     # Attempts to save each table from the page to disk
-    def save(self):
+    def save(self, save_type = 'csv'):
         root_directory = "lobbying\data"
         match save_type:
             case 'csv':
                 for table in self.tables.keys():
                     self.write_data_to_csv(f'{root_directory}\{table.replace(" ","_").lower()}.csv', self.tables[table])
+            case 'psql':
+                for table in self.tables.keys():
+                    self.write_data_to_psql(table.replace(" ","_").lower(), self.tables[table])
 
 
     def write_data_to_csv(self, file_path, dataframe):
@@ -190,6 +215,27 @@ class DataPage:
         if write and type(dataframe) == pd.DataFrame:
             print('Saving data to ' + file_path)
             dataframe.to_csv(file_path, mode ='a+',header=(not os.path.exists(file_path)), index=False)
+
+
+    def write_data_to_psql(self, postgres_table, dataframe):
+        conn = get_conn()
+        tuples = [tuple(x) for x in dataframe.to_numpy()]
+
+        cols = ','.join(list(dataframe.columns))
+        # SQL query to execute
+        query = "INSERT INTO %s(%s) VALUES %%s" % (postgres_table, cols)
+        cursor = conn.cursor()
+        try:
+            extras.execute_values(cursor, query, tuples)
+            conn.commit()
+        except (Exception, psycopg2.DatabaseError) as error:
+            print("Error: %s" % error)
+            conn.rollback()
+            cursor.close()
+            return 1
+        print("the dataframe is inserted")
+        cursor.close()
+
 
 
     # Helper function to replace all blocks of whitespace with a single space
