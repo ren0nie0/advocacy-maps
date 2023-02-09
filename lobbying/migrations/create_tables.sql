@@ -1,7 +1,7 @@
 DROP TABLE IF EXISTS headers;
 DROP TABLE IF EXISTS activities;
-DROP TABLE IF EXISTS contributions;
-DROP TABLE IF EXISTS compensation;
+DROP TABLE IF EXISTS campaign_contributions;
+DROP TABLE IF EXISTS client_compensation;
 
 CREATE TABLE IF NOT EXISTS headers (
   source_name VARCHAR(255),
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS headers (
   title VARCHAR(255),
   business_name VARCHAR(255),
   address VARCHAR(255),
-  city_state_zip VARCHAR(255),
+  city_state_zip_code VARCHAR(255),
   country VARCHAR(255),
   agent_type VARCHAR(255),
   phone VARCHAR(50)
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS activities (
   direct_business_association VARCHAR(255)
 );
 
-CREATE TABLE IF NOT EXISTS contributions (
+CREATE TABLE IF NOT EXISTS campaign_contributions (
   source_name VARCHAR(255),
   date_range VARCHAR(255),
   date VARCHAR(255),
