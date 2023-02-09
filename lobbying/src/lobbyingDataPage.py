@@ -3,21 +3,67 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup as bs
 import re
-
+import psycopg2
+import psycopg2.extras as extras
+import numpy as np
 
 #supported save types:
 # csv
-#
+# psql
 save_type = 'csv'
+params_dict = {
+    'host'      : 'localhost',
+    'port'      : '5432',
+    'database'  : 'maple_lobbying',
+    'user'      : 'geekc',
+    'password'  : 'asdf'
+}
 
-def create_table(query_result, columns):
-    def divide_chunks(some_list,chunk_size):
+DEBUG = False
+
+def get_conn():
+    conn = psycopg2.connect(**params_dict)
+    return conn
+
+
+
+def divide_text(query_result, columns):
+    # splits a list into a list of lists,
+    # with the length of each inner list
+    # equal to chunk_size
+    def chunk_list(some_list,chunk_size):
             for i in range(0, len(some_list), chunk_size):
                 yield some_list[i:i+chunk_size]
     split_text=[line.strip() for line in query_result.split('\n') if line.strip()]
-    divided_text = list(divide_chunks(split_text, len(columns)))
-    table_df = pd.DataFrame(divided_text, columns=columns)
-    return table_df
+    split_text = separate_date(split_text)
+    divided_text = list(chunk_list(split_text, len(columns)))
+    return create_table(divided_text, columns)
+
+def create_table(divided_text, columns):
+    try:
+        table_df = pd.DataFrame(divided_text, columns=columns)
+        return table_df
+    except:
+        dataframe_exception(divided_text, columns)
+
+def dataframe_exception(divided_text, columns):
+    print('DATAFRAME EXCPETION')
+    # for i in range(len(divided_text)):
+    #     divided_text[i] = separate_date(divided_text[i])
+    # create_table(divided_text, columns)
+
+def separate_date(data_row_list):
+    new_list = []
+    regex_string = r"^(\d+/\d+/\d+)\s?([\w\s/.]+)$"
+    regex_query = re.compile(regex_string)
+    for i in range(len(data_row_list)):
+        result = re.fullmatch(regex_query, data_row_list[i])
+        if result:
+            new_list.append(result.group(1))
+            new_list.append(result.group(2))
+        else:
+            new_list.append(data_row_list[i])
+    return new_list
 
 
 class DataPage:
