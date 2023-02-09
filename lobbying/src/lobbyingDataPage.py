@@ -19,7 +19,7 @@ params_dict = {
     'user'      : 'geekc',
     'password'  : 'asdf'
 }
-DEBUG = True
+DEBUG = False
 
 def get_conn():
     conn = psycopg2.connect(**params_dict)
@@ -96,8 +96,11 @@ class DataPage:
 
         if self.check_validity():
             self.get_header()
+            if DEBUG is True: print('Got Header')
             self.get_date_range()
+            if DEBUG is True: print('Got Date Range')
             self.get_source_name()
+            if DEBUG is True: print('Got Source Name')
             self.scrape_tables()
             #self.add_source()
 
@@ -148,8 +151,11 @@ class DataPage:
     # That's it for the easy stuff
     def scrape_tables(self):
         self.get_lobbying_activity()
+        if DEBUG is True: print('Got Lobbying Activity')
         self.get_campaign_contributions()
+        if DEBUG is True: print('Got campaign_contributiosn')
         self.get_client_compensation()
+        if DEBUG is True: print('Got client compensation')
         #SALARIES?
         #OPERATING EXPENSES?
         #ENTERTAINMENT / ADDITIONAL EXPENSES?
@@ -166,27 +172,6 @@ class DataPage:
         return query_results
 
 
-    def get_date_range(self):
-        query_string = r"(?<=period:).*?(\d\d\/\d\d\/\d\d\d\d - \d\d\/\d\d\/\d\d\d\d)"
-        query = re.compile(query_string,re.DOTALL)
-        query_results = re.search(query, self.soup.text)
-        self.date_range = query_results.group(1)
-
-
-    # Implement seperately for lobbyists and entities
-    def get_source_name():
-        pass
-
-
-    def scrape_tables(self):
-        self.get_lobbying_activity()
-        self.get_campaign_contributions()
-        self.get_client_compensation()
-        #SALARIES?
-        #OPERATING EXPENSES?
-        #ENTERTAINMENT / ADDITIONAL EXPENSES?
-
-
     def get_lobbying_activity(self):
         table_name = 'Activities'
         columns = ['House / Senate','Bill Number or Agency Name','Bill title or activity','Agent position','Amount','Direct business association']
@@ -195,10 +180,11 @@ class DataPage:
 
         #our first query has a wider scope so we can pull the client and lobbyist name
         query_results = self.query_page(self.activities_query, r' amount\n')# activities_query is different for individuals and lobbyists
+        if DEBUG is True: print(query_results)
         for query_result in query_results:
             activities_table = self.query_page(table_start, table_end, query_result)[0]
 
-            anon_activities_df = create_table(activities_table, columns)
+            anon_activities_df = divide_text(activities_table, columns)
             activities_df = self.add_identifiers_to_activities_table(query_result, anon_activities_df)
             self.update_table(table_name,activities_df)
 
@@ -217,12 +203,12 @@ class DataPage:
     def get_client_compensation(self):
         table_name = 'Client Compensation'
         columns = ['Client Name','Amount']
-        table_start = r"".join(columns)
+        table_start = 'NameAmount'
         table_end = r'Total salaries received'
 
         query_results = self.query_page(table_start, table_end)
         for query_result in query_results:
-            compensation_df = create_table(query_result, columns)
+            compensation_df = divide_text(query_result, columns)
             self.update_table(table_name, compensation_df)
 
 
@@ -310,7 +296,7 @@ class LobbyistDataPage(DataPage):
 
         query_results = self.query_page(table_start, table_end)
         for query_result in query_results:
-            contributions_df = create_table(query_result, columns)
+            contributions_df = divide_text(query_result, columns)
             contributions_df['Lobbyist name'] = self.source_name
             self.update_table(table_name, contributions_df)
 
@@ -348,8 +334,9 @@ class EntityDataPage(DataPage):
         table_end = "\xa0\xa0Total contributions"
 
         query_results = self.query_page(table_start, table_end)
+        if DEBUG is True: print(query_results)
         for query_result in query_results:
-            contributions_df = create_table(query_result, columns)
+            contributions_df = divide_text(query_result, columns)
             self.update_table(table_name, contributions_df)
 
 
