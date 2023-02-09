@@ -199,9 +199,10 @@ class DataPage:
 
     # This function adds the date range and entity / lobbyist name to each table
     def add_source(self):
-        for table in self.tables:
-            table['Date Range'] = self.date_range
-            table['Source'] = self.source_name
+        for table in self.tables.keys():
+            self.tables[table]['Date Range'] = self.date_range
+            if table is not 'Headers': #the header table already has the source name
+                self.tables[table]['Source'] = self.source_name
     ## END INIT FUNCTIONS ##
 
 
