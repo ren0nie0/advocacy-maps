@@ -21,29 +21,10 @@ params_dict = {
 }
 DEBUG = False
 
-def get_conn():
-    conn = psycopg2.connect(**params_dict)
-    return conn
-
-
-#supported save types:
-# csv
-# psql
-save_type = 'csv'
-params_dict = {
-    'host'      : 'localhost',
-    'port'      : '5432',
-    'database'  : 'maple_lobbying',
-    'user'      : 'geekc',
-    'password'  : 'asdf'
-}
-
-DEBUG = False
 
 def get_conn():
     conn = psycopg2.connect(**params_dict)
     return conn
-
 
 
 def divide_text(query_result, columns):
@@ -58,6 +39,7 @@ def divide_text(query_result, columns):
     divided_text = list(chunk_list(split_text, len(columns)))
     return create_table(divided_text, columns)
 
+
 def create_table(divided_text, columns):
     try:
         table_df = pd.DataFrame(divided_text, columns=columns)
@@ -65,11 +47,13 @@ def create_table(divided_text, columns):
     except:
         dataframe_exception(divided_text, columns)
 
+
 def dataframe_exception(divided_text, columns):
     print('DATAFRAME EXCPETION')
     # for i in range(len(divided_text)):
     #     divided_text[i] = separate_date(divided_text[i])
     # create_table(divided_text, columns)
+
 
 def separate_date(data_row_list):
     new_list = []
@@ -85,6 +69,7 @@ def separate_date(data_row_list):
     return new_list
 
 
+
 class DataPage:
     table_columns = {}
     activities_query = ""
@@ -94,7 +79,7 @@ class DataPage:
         self.soup = bs(html, 'html.parser')
         self.dfs = pd.read_html(html)
 
-        if self.check_validity():
+        if self.is_valid():
             self.get_header()
             if DEBUG is True: print('Got Header')
             self.get_date_range()
@@ -102,12 +87,12 @@ class DataPage:
             self.get_source_name()
             if DEBUG is True: print('Got Source Name')
             self.scrape_tables()
-            #self.add_source()
+            self.add_source()
 
 
     ## BEGIN INIT FUNCTIONS ##
     # returns true if the html is valid and processable
-    def check_validity(self):
+    def is_valid(self):
         if 'An Error Occurred' in self.soup.text:
             return False
         return True
@@ -221,7 +206,7 @@ class DataPage:
 
 
     # Attempts to save each table from the page to disk
-    def save(self, save_type = 'csv'):
+    def save(self, save_type = save_type):
         root_directory = "lobbying\data"
         match save_type:
             case 'csv':
