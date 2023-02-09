@@ -1,4 +1,5 @@
 import os
+import sys
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup as bs
@@ -6,6 +7,24 @@ import re
 import psycopg2
 import psycopg2.extras as extras
 import numpy as np
+
+#supported save types:
+# csv
+# psql
+save_type = 'csv'
+params_dict = {
+    'host'      : 'localhost',
+    'port'      : '5432',
+    'database'  : 'maple_lobbying',
+    'user'      : 'geekc',
+    'password'  : 'asdf'
+}
+DEBUG = True
+
+def get_conn():
+    conn = psycopg2.connect(**params_dict)
+    return conn
+
 
 #supported save types:
 # csv
@@ -70,6 +89,7 @@ class DataPage:
     table_columns = {}
     activities_query = ""
     def __init__(self, html):
+        if DEBUG is True: self.html = html
         self.tables = {} # A dictionary that will hold all the tables as they are extracted
         self.soup = bs(html, 'html.parser')
         self.dfs = pd.read_html(html)
@@ -90,15 +110,27 @@ class DataPage:
         return True
 
 
+    #updates a table in the tables dictionary
+    #creates the table if it does not yet exist
+    def update_table(self, table_name, dataframe):
+        if table_name in self.tables.keys():
+            pd.concat([self.tables[table_name], dataframe])
+        else:
+            self.tables[table_name] = dataframe
+
+
     # The one easy table. It's the same throughout time, extremely consistent, and pandas can find it easily
     def get_header(self):
         columns =['Authorizing Officer name','Lobbyist name','Title','Business name','Address','City, state, zip code','Country','Agent type','Phone']
         table_name = 'Headers'
-
         header_df = self.dfs[5][0:7].transpose() #Extract header table and orient it properly
         header_df.columns = header_df.iloc[0] #Pull the column names from the first row...
         header_df = header_df[1:] # ... and then drop that row
-        self.update_table(table_name, header_df)
+
+        empty_dataframe = pd.DataFrame(columns=columns)
+        normalized_header_df = pd.concat([empty_dataframe, header_df]) #This is necessary to ensure consistent columns
+        self.update_table(table_name, normalized_header_df)
+
 
     def get_date_range(self):
         self.date_range = self.dfs[4][0][2].split('period:  ')[1]
@@ -134,23 +166,17 @@ class DataPage:
         return query_results
 
 
-    #updates a table in the tables dictionary
-    #creates the table if it does not yet exist
-    def update_table(self, table_name, dataframe):
-        if table_name in self.tables.keys():
-            pd.concat([self.tables[table_name], dataframe])
-        else:
-            self.tables[table_name] = dataframe
-
     def get_date_range(self):
         query_string = r"(?<=period:).*?(\d\d\/\d\d\/\d\d\d\d - \d\d\/\d\d\/\d\d\d\d)"
         query = re.compile(query_string,re.DOTALL)
         query_results = re.search(query, self.soup.text)
         self.date_range = query_results.group(1)
 
+
     # Implement seperately for lobbyists and entities
     def get_source_name():
         pass
+
 
     def scrape_tables(self):
         self.get_lobbying_activity()
@@ -159,6 +185,7 @@ class DataPage:
         #SALARIES?
         #OPERATING EXPENSES?
         #ENTERTAINMENT / ADDITIONAL EXPENSES?
+
 
     def get_lobbying_activity(self):
         table_name = 'Activities'
@@ -199,16 +226,6 @@ class DataPage:
             self.update_table(table_name, compensation_df)
 
 
-    # The one easy table. It's the same throughout time, extremely consistent, and pandas can find it easily
-    def get_header(self):
-        columns =['Authorizing Officer name','Lobbyist name','Title','Business name','Address','City, state, zip code','Country','Agent type','Phone']
-        table_name = 'Header'
-        header_df = self.dfs[5][0:7].transpose() #Extract header table and orient it properly
-        header_df.columns = header_df.iloc[0] #Pull the column names from the first row...
-        header_df = header_df[1:] # ... and then drop that row
-        self.update_table(table_name, header_df)
-
-
     # This function adds the date range and entity / lobbyist name to each table
     def add_source(self):
         for table in self.tables:
@@ -218,12 +235,16 @@ class DataPage:
 
 
     # Attempts to save each table from the page to disk
-    def save(self):
+    def save(self, save_type = 'csv'):
         root_directory = "lobbying\data"
         match save_type:
             case 'csv':
                 for table in self.tables.keys():
                     self.write_data_to_csv(f'{root_directory}\{table.replace(" ","_").lower()}.csv', self.tables[table])
+            case 'psql':
+                for table in self.tables.keys():
+                    self.write_data_to_psql(table.replace(" ","_").lower(), self.tables[table])
+
 
     def write_data_to_csv(self, file_path, dataframe):
         write = True
@@ -239,10 +260,34 @@ class DataPage:
             print('Saving data to ' + file_path)
             dataframe.to_csv(file_path, mode ='a+',header=(not os.path.exists(file_path)), index=False)
 
+
+    def write_data_to_psql(self, postgres_table, dataframe):
+        conn = get_conn()
+        tuples = [tuple(x) for x in dataframe.to_numpy()]
+
+        cols = ','.join(list(dataframe.columns))
+        # SQL query to execute
+        query = "INSERT INTO %s(%s) VALUES %%s" % (postgres_table, cols)
+        cursor = conn.cursor()
+        try:
+            extras.execute_values(cursor, query, tuples)
+            conn.commit()
+        except (Exception, psycopg2.DatabaseError) as error:
+            print("Error: %s" % error)
+            conn.rollback()
+            cursor.close()
+            return 1
+        print("the dataframe is inserted")
+        cursor.close()
+
+
+
     # Helper function to replace all blocks of whitespace with a single space
     # currently not used??? Probably should be!
     def clean_entry(entry):
         return re.sub("\s\s+", " ", entry)
+
+
 
 class LobbyistDataPage(DataPage):
 
@@ -266,6 +311,7 @@ class LobbyistDataPage(DataPage):
         query_results = self.query_page(table_start, table_end)
         for query_result in query_results:
             contributions_df = create_table(query_result, columns)
+            contributions_df['Lobbyist name'] = self.source_name
             self.update_table(table_name, contributions_df)
 
 
