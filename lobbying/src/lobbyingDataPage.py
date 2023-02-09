@@ -50,6 +50,8 @@ def create_table(divided_text, columns):
 
 def dataframe_exception(divided_text, columns):
     print('DATAFRAME EXCPETION')
+    print(divided_text)
+    print(columns)
     # for i in range(len(divided_text)):
     #     divided_text[i] = separate_date(divided_text[i])
     # create_table(divided_text, columns)
@@ -101,6 +103,8 @@ class DataPage:
     #updates a table in the tables dictionary
     #creates the table if it does not yet exist
     def update_table(self, table_name, dataframe):
+        if dataframe is None: #TODO This is also error handling! Dataframe should NEVER be none unless something goes wrong
+            return
         if table_name in self.tables.keys():
             pd.concat([self.tables[table_name], dataframe])
         else:
@@ -159,8 +163,8 @@ class DataPage:
 
     def get_lobbying_activity(self):
         table_name = 'Activities'
-        columns = ['House / Senate','Bill Number or Agency Name','Bill title or activity','Agent position','Amount','Direct business association']
-        table_start = r"".join(columns)
+        columns = ['House or Senate','Bill Number or Agency Name','Bill title or activity','Agent position','Amount','Direct business association']
+        table_start = 'House / SenateBill Number or Agency NameBill title or activityAgent positionAmountDirect business association'
         table_end = r'\xa0\xa0\xa0\nTotal'
 
         #our first query has a wider scope so we can pull the client and lobbyist name
@@ -201,8 +205,8 @@ class DataPage:
     def add_source(self):
         for table in self.tables.keys():
             self.tables[table]['Date Range'] = self.date_range
-            if table is not 'Headers': #the header table already has the source name
-                self.tables[table]['Source'] = self.source_name
+            if table != 'Headers': #the header table already has the source name
+                self.tables[table]['Source name'] = self.source_name
     ## END INIT FUNCTIONS ##
 
 
@@ -236,8 +240,7 @@ class DataPage:
     def write_data_to_psql(self, postgres_table, dataframe):
         conn = get_conn()
         tuples = [tuple(x) for x in dataframe.to_numpy()]
-
-        cols = ','.join(list(dataframe.columns))
+        cols = ','.join([col.lower().replace(",","").replace(" ","_".replace('/','or')) for col in list(dataframe.columns)])
         # SQL query to execute
         query = "INSERT INTO %s(%s) VALUES %%s" % (postgres_table, cols)
         cursor = conn.cursor()
@@ -329,20 +332,16 @@ class EntityDataPage(DataPage):
 
 
 ## functions to build the above classes from a list of urls or html files
-def convert_html_list(html_list):
-    page_list = []
-    for i, html in enumerate(html_list):
-        print(f'converting html index {i} into data page')
-        if 'Lobbyist Entity' in str(html):
-            page_list.append(EntityDataPage(html))
-        else:
-            page_list.append(LobbyistDataPage(html))
-    return page_list
+def convert_html(html):
+    if 'Lobbyist Entity' in str(html):
+        return EntityDataPage(html)
+    else:
+        return LobbyistDataPage(html)
 
 def extract_and_save(html_list):
-    page_list = convert_html_list(html_list)
-    for page in page_list:
-        page.save()
+    for i, html in enumerate(html_list):
+        print(f'converting html index {i} into data page')
+        convert_html(html).save('psql')
 
 def pull_data(url):
     headers={"User-Agent": "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"}
