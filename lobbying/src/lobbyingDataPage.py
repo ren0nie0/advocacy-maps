@@ -7,6 +7,7 @@ import re
 import psycopg2
 import psycopg2.extras as extras
 import numpy as np
+import logging
 
 #supported save types:
 # csv -currently deprecated
@@ -19,8 +20,8 @@ params_dict = {
     'user'      : 'geekc',
     'password'  : 'asdf'
 }
-DEBUG = False
 
+logging.basicConfig(level=logging.DEBUG)
 
 def get_conn():
     conn = psycopg2.connect(**params_dict)
@@ -49,9 +50,9 @@ def create_table(divided_text, columns):
 
 
 def dataframe_exception(divided_text, columns):
-    print('DATAFRAME EXCPETION')
-    print(divided_text)
-    print(columns)
+    logging.exception('DATAFRAME EXCPETION')
+    logging.exception(divided_text)
+    logging.exception(columns)
     # for i in range(len(divided_text)):
     #     divided_text[i] = separate_date(divided_text[i])
     # create_table(divided_text, columns)
@@ -76,16 +77,16 @@ class DataPage:
     table_columns = {}
     activities_query = ""
     def __init__(self, html):
-        if DEBUG: self.html = html
         self.has_error = False
         self.tables = {} # A dictionary that will hold all the tables as they are extracted
         self.soup = bs(html, 'html.parser')
+        self.dfs = pd.read_html(html)
+
         if self.is_valid():
-            self.dfs = pd.read_html(html)
             self.get_header()
             self.get_date_range()
             self.get_source_name()
-            if DEBUG: print(f'Got Header {self.source_name} {self.date_range}')
+            logging.info(f'Got Header {self.source_name} {self.date_range}')
             self.scrape_tables()
             self.add_source()
 
@@ -94,6 +95,7 @@ class DataPage:
     # returns true if the html is valid and processable
     def is_valid(self):
         if 'An Error Occurred' in self.soup.text:
+            logging.exception('Page Error')
             return False
         return True
 
@@ -102,7 +104,7 @@ class DataPage:
     #creates the table if it does not yet exist
     def update_table(self, table_name, dataframe):
         if dataframe is None: #TODO This is also error handling! Dataframe should NEVER be none unless something goes wrong
-            print(f"INVALID DATAFRAME {table_name}")
+            logging.exception(f"INVALID DATAFRAME {table_name}")
             return
         if table_name in self.tables.keys():
             self.tables[table_name] = pd.concat([self.tables[table_name], dataframe])
@@ -140,11 +142,11 @@ class DataPage:
     # That's it for the easy stuff
     def scrape_tables(self):
         self.get_lobbying_activity()
-        if DEBUG: print(f"Lobbying Activity {bool('Activities' in self.tables.keys())}")
+        logging.info(f"Lobbying Activity {bool('Activities' in self.tables.keys())}")
         self.get_campaign_contributions()
-        if DEBUG: print(f"Campaign Contributions {bool('Campaign Contributions' in self.tables.keys())}")
+        logging.info(f"Campaign Contributions {bool('Campaign Contributions' in self.tables.keys())}")
         self.get_client_compensation()
-        if DEBUG: print(f"Client Compensation {bool('Client Compensation' in self.tables.keys())}")
+        logging.info(f"Client Compensation {bool('Client Compensation' in self.tables.keys())}")
         #SALARIES?
         #OPERATING EXPENSES?
         #ENTERTAINMENT / ADDITIONAL EXPENSES?
@@ -257,7 +259,7 @@ class DataPage:
             conn.rollback()
             cursor.close()
             return 1
-        if DEBUG: print(f"dataframe successfully inserted into table '{postgres_table}'")
+        logging.info(f"dataframe successfully inserted into table '{postgres_table}'")
         cursor.close()
 
 
@@ -339,12 +341,12 @@ class EntityDataPage(DataPage):
 ## functions to build the above classes from a list of urls or html files
 def save_data_from_url_list(url_list, save_type = save_type):
     for i, url in enumerate(url_list):
-        if DEBUG: print(f"url index: {i}\npulling data from {url}")
+        logging.info(f"url index: {i}\npulling data from {url}")
         download_extract_save(url, save_type=save_type)
 
 def save_data_from_html_list(html_list, save_type=save_type):
     for i, html in enumerate(html_list):
-        if DEBUG: print(f"pulling data from list index {i}")
+        logging.info(f"pulling data from list index {i}")
         convert_html(html).save(save_type=save_type)
 
 def download_extract_save(url, save_type = save_type):
