@@ -237,7 +237,7 @@ class DataPage:
 
     def write_data_to_psql(self, postgres_table, dataframe):
         conn = get_conn()
-
+        tuples = [tuple(x) for x in dataframe.to_numpy()]
         cols = ','.join([col.lower().replace(",","").replace(" ","_".replace('/','or')) for col in list(dataframe.columns)])
         # SQL query to execute
         query = "INSERT INTO %s(%s) VALUES %%s" % (postgres_table, cols)
