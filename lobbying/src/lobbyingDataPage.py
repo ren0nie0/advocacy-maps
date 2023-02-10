@@ -77,11 +77,11 @@ class DataPage:
     activities_query = ""
     def __init__(self, html):
         if DEBUG: self.html = html
+        self.has_error = False
         self.tables = {} # A dictionary that will hold all the tables as they are extracted
         self.soup = bs(html, 'html.parser')
-        self.dfs = pd.read_html(html)
-
         if self.is_valid():
+            self.dfs = pd.read_html(html)
             self.get_header()
             self.get_date_range()
             self.get_source_name()
@@ -247,6 +247,13 @@ class DataPage:
             conn.commit()
         except (Exception, psycopg2.DatabaseError) as error:
             print(f"Error: {error}On table {postgres_table}")
+            self.has_error = True
+            # columns = dataframe.columns.tolist()
+            # for _, i in dataframe.iterrows():
+            #     for c in columns:
+            #         if i[c] and len(i[c]) > 255:
+            #             print(c)
+            #             print(i[c])
             conn.rollback()
             cursor.close()
             return 1
@@ -330,18 +337,18 @@ class EntityDataPage(DataPage):
 
 
 ## functions to build the above classes from a list of urls or html files
-def save_data_from_url_list(url_list):
+def save_data_from_url_list(url_list, save_type = save_type):
     for i, url in enumerate(url_list):
         if DEBUG: print(f"url index: {i}\npulling data from {url}")
-        download_extract_save(url)
+        download_extract_save(url, save_type=save_type)
 
 def save_data_from_html_list(html_list, save_type=save_type):
     for i, html in enumerate(html_list):
         if DEBUG: print(f"pulling data from list index {i}")
         convert_html(html).save(save_type=save_type)
 
-def download_extract_save(url):
-    convert_html(pull_html(url)).save()
+def download_extract_save(url, save_type = save_type):
+    convert_html(pull_html(url)).save(save_type = save_type)
 
 
 def convert_html(html):

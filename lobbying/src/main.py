@@ -19,5 +19,5 @@ from lobbyingScraper import *
 if __name__ == "__main__":
     #disclosure_links = extract_disclosures(extract_client_links())
     #html_list = download_html_list(disclosure_links)
-    html_list = extract_disclosures(extract_client_links(2020))
-    save_data_from_html_list(html_list, save_type='psql')
+    disclosure_url_list = extract_disclosures(extract_client_links('2020'))
+    save_data_from_url_list(disclosure_url_list, save_type='psql')
