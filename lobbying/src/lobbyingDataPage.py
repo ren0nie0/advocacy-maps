@@ -333,10 +333,10 @@ def save_data_from_url_list(url_list):
         if DEBUG: print(f"url index: {i}\npulling data from {url}")
         download_extract_save(url)
 
-def save_data_from_html_list(html_list):
+def save_data_from_html_list(html_list, save_type=save_type):
     for i, html in enumerate(html_list):
         if DEBUG: print(f"pulling data from list index {i}")
-        convert_html(html).save()
+        convert_html(html).save(save_type=save_type)
 
 
 def download_extract_save(url):
