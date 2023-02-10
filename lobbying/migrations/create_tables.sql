@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS headers (
   phone VARCHAR(50)
 );
 
-CREATE TABLE IF NOT EXISTS activities (
+CREATE TABLE IF NOT EXISTS lobbying_activities (
   source_name VARCHAR(255),
   date_range VARCHAR(255),
   lobbyist_name varchar(255),
