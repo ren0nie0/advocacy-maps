@@ -9,9 +9,9 @@ import psycopg2.extras as extras
 import numpy as np
 
 #supported save types:
-# csv
+# csv -currently deprecated
 # psql
-save_type = 'csv'
+save_type = 'psql'
 params_dict = {
     'host'      : 'localhost',
     'port'      : '5432',
@@ -35,7 +35,7 @@ def divide_text(query_result, columns):
             for i in range(0, len(some_list), chunk_size):
                 yield some_list[i:i+chunk_size]
     split_text=[line.strip() for line in query_result.split('\n') if line.strip()]
-    split_text = separate_date(split_text)
+    split_text = separate_date(split_text) #TODO i guess it's fine to run this for everything? idk tho, maybe just work it into exception handling
     divided_text = list(chunk_list(split_text, len(columns)))
     return create_table(divided_text, columns)
 
@@ -74,18 +74,16 @@ class DataPage:
     table_columns = {}
     activities_query = ""
     def __init__(self, html):
-        if DEBUG is True: self.html = html
+        if DEBUG: self.html = html
         self.tables = {} # A dictionary that will hold all the tables as they are extracted
         self.soup = bs(html, 'html.parser')
         self.dfs = pd.read_html(html)
 
         if self.is_valid():
             self.get_header()
-            if DEBUG is True: print('Got Header')
             self.get_date_range()
-            if DEBUG is True: print('Got Date Range')
             self.get_source_name()
-            if DEBUG is True: print('Got Source Name')
+            if DEBUG: print(f'Got Header {self.source_name} {self.date_range}')
             self.scrape_tables()
             self.add_source()
 
@@ -101,13 +99,17 @@ class DataPage:
     #updates a table in the tables dictionary
     #creates the table if it does not yet exist
     def update_table(self, table_name, dataframe):
+        if dataframe is None: #TODO This is also error handling! Dataframe should NEVER be none unless something goes wrong
+            print(f"INVALID DATAFRAME {table_name}")
+            return
         if table_name in self.tables.keys():
-            pd.concat([self.tables[table_name], dataframe])
+            self.tables[table_name] = pd.concat([self.tables[table_name], dataframe])
         else:
             self.tables[table_name] = dataframe
 
 
     # The one easy table. It's the same throughout time, extremely consistent, and pandas can find it easily
+    # the one big problem with it is that it's different columns for individuals and entities
     def get_header(self):
         columns =['Authorizing Officer name','Lobbyist name','Title','Business name','Address','City, state, zip code','Country','Agent type','Phone']
         table_name = 'Headers'
@@ -136,11 +138,11 @@ class DataPage:
     # That's it for the easy stuff
     def scrape_tables(self):
         self.get_lobbying_activity()
-        if DEBUG is True: print('Got Lobbying Activity')
+        if DEBUG: print(f"Lobbying Activity {bool('Activities' in self.tables.keys())}")
         self.get_campaign_contributions()
-        if DEBUG is True: print('Got campaign_contributiosn')
+        if DEBUG: print(f"Campaign Contributions {bool('Campaign Contributions' in self.tables.keys())}")
         self.get_client_compensation()
-        if DEBUG is True: print('Got client compensation')
+        if DEBUG: print(f"Client Compensation {bool('Client Compensation' in self.tables.keys())}")
         #SALARIES?
         #OPERATING EXPENSES?
         #ENTERTAINMENT / ADDITIONAL EXPENSES?
@@ -159,19 +161,17 @@ class DataPage:
 
     def get_lobbying_activity(self):
         table_name = 'Activities'
-        columns = ['House / Senate','Bill Number or Agency Name','Bill title or activity','Agent position','Amount','Direct business association']
-        table_start = r"".join(columns)
+        columns = ['House or Senate','Bill Number or Agency Name','Bill title or activity','Agent position','Amount','Direct business association']
+        table_start = 'House / SenateBill Number or Agency NameBill title or activityAgent positionAmountDirect business association'
         table_end = r'\xa0\xa0\xa0\nTotal'
 
         #our first query has a wider scope so we can pull the client and lobbyist name
         query_results = self.query_page(self.activities_query, r' amount\n')# activities_query is different for individuals and lobbyists
-        if DEBUG is True: print(query_results)
         for query_result in query_results:
             activities_table = self.query_page(table_start, table_end, query_result)[0]
-
             anon_activities_df = divide_text(activities_table, columns)
             activities_df = self.add_identifiers_to_activities_table(query_result, anon_activities_df)
-            self.update_table(table_name,activities_df)
+            self.update_table(table_name, activities_df)
 
 
     #implemented seperately for lobbyists and entities
@@ -201,8 +201,8 @@ class DataPage:
     def add_source(self):
         for table in self.tables.keys():
             self.tables[table]['Date Range'] = self.date_range
-            if table is not 'Headers': #the header table already has the source name
-                self.tables[table]['Source'] = self.source_name
+            if table != 'Headers': #the header table already has the source name
+                self.tables[table]['Source name'] = self.source_name
     ## END INIT FUNCTIONS ##
 
 
@@ -236,8 +236,7 @@ class DataPage:
     def write_data_to_psql(self, postgres_table, dataframe):
         conn = get_conn()
         tuples = [tuple(x) for x in dataframe.to_numpy()]
-
-        cols = ','.join(list(dataframe.columns))
+        cols = ','.join([col.lower().replace(",","").replace(" ","_".replace('/','or')) for col in list(dataframe.columns)])
         # SQL query to execute
         query = "INSERT INTO %s(%s) VALUES %%s" % (postgres_table, cols)
         cursor = conn.cursor()
@@ -245,11 +244,11 @@ class DataPage:
             extras.execute_values(cursor, query, tuples)
             conn.commit()
         except (Exception, psycopg2.DatabaseError) as error:
-            print("Error: %s" % error)
+            print(f"Error: {error}On table {postgres_table}")
             conn.rollback()
             cursor.close()
             return 1
-        print("the dataframe is inserted")
+        if DEBUG: print(f"dataframe successfully inserted into table '{postgres_table}'")
         cursor.close()
 
 
@@ -288,8 +287,8 @@ class LobbyistDataPage(DataPage):
 
 
     def add_identifiers_to_activities_table(self, query_result, dataframe):
-        dataframe['Client'] = query_result[0].split('\n')[0]
-        dataframe['Lobbyist'] = self.source_name
+        dataframe['Lobbyist name'] = self.source_name
+        dataframe['Client name'] = query_result[0].split('\n')[0]
         return dataframe
 
 
@@ -308,8 +307,9 @@ class EntityDataPage(DataPage):
 
 
     def add_identifiers_to_activities_table(self, query_result, dataframe):
-        dataframe['Client'] = query_result.split('\n')[0]
-        dataframe['Lobbyist'] = query_result.split('\n')[2]
+        split_result = [entry for entry in query_result.split('\n') if entry]
+        dataframe['Lobbyist name'] = query_result.split('\n')[0]
+        dataframe['Client name'] = split_result[2]
         return dataframe
 
 
@@ -320,7 +320,6 @@ class EntityDataPage(DataPage):
         table_end = "\xa0\xa0Total contributions"
 
         query_results = self.query_page(table_start, table_end)
-        if DEBUG is True: print(query_results)
         for query_result in query_results:
             contributions_df = divide_text(query_result, columns)
             self.update_table(table_name, contributions_df)
@@ -329,34 +328,29 @@ class EntityDataPage(DataPage):
 
 
 ## functions to build the above classes from a list of urls or html files
-def convert_html_list(html_list):
-    page_list = []
+def save_data_from_url_list(url_list):
+    for i, url in enumerate(url_list):
+        if DEBUG: print(f"url index: {i}\npulling data from {url}")
+        download_extract_save(url)
+
+def save_data_from_html_list(html_list, save_type=save_type):
     for i, html in enumerate(html_list):
-        print(f'converting html index {i} into data page')
-        if 'Lobbyist Entity' in str(html):
-            page_list.append(EntityDataPage(html))
-        else:
-            page_list.append(LobbyistDataPage(html))
-    return page_list
+        if DEBUG: print(f"pulling data from list index {i}")
+        convert_html(html).save(save_type=save_type)
 
-def extract_and_save(html_list):
-    page_list = convert_html_list(html_list)
-    for page in page_list:
-        page.save()
 
-def pull_data(url):
+def download_extract_save(url):
+    convert_html(pull_html(url)).save()
+
+
+def convert_html(html):
+    if 'Lobbyist Entity' in str(html):
+        return EntityDataPage(html)
+    else:
+        return LobbyistDataPage(html)
+
+def pull_html(url):
     headers={"User-Agent": "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"}
     result = requests.get(url, headers=headers)
     result.raise_for_status()
     return result.content
-
-def download_html_list(url_list):
-    html_list = []
-    for url in url_list:
-        print("Pulling data from " + url)
-        html_list.append(pull_data(url))
-    return html_list
-
-def save_data_from_url_list(url_list):
-    disclosure_links = extract_and_save(download_html_list(url_list))
-    html_list = download_html_list(disclosure_links)
