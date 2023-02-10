@@ -50,6 +50,8 @@ def create_table(divided_text, columns):
 
 def dataframe_exception(divided_text, columns):
     print('DATAFRAME EXCPETION')
+    print(divided_text)
+    print(columns)
     # for i in range(len(divided_text)):
     #     divided_text[i] = separate_date(divided_text[i])
     # create_table(divided_text, columns)
@@ -235,7 +237,7 @@ class DataPage:
 
     def write_data_to_psql(self, postgres_table, dataframe):
         conn = get_conn()
-        tuples = [tuple(x) for x in dataframe.to_numpy()]
+
         cols = ','.join([col.lower().replace(",","").replace(" ","_".replace('/','or')) for col in list(dataframe.columns)])
         # SQL query to execute
         query = "INSERT INTO %s(%s) VALUES %%s" % (postgres_table, cols)
@@ -337,7 +339,6 @@ def save_data_from_html_list(html_list, save_type=save_type):
     for i, html in enumerate(html_list):
         if DEBUG: print(f"pulling data from list index {i}")
         convert_html(html).save(save_type=save_type)
-
 
 def download_extract_save(url):
     convert_html(pull_html(url)).save()
