@@ -77,7 +77,7 @@ class PageFactory:
         html = html if html else PageFactory.pull_html(url)
 
         if 'Disclosure reporting details' not in str(html):
-            logging.exception(f'Page Error for url {url}')
+            logging.exception(f'Page Error for url {url}, html {str(html)}')
             return None
 
         if 'Lobbyist Entity' in str(html):
