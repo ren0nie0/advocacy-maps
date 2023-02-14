@@ -24,6 +24,9 @@ def save_data_from_url_list(url_list, save_type=save_type):
         if page:
             page.save(save_type)
 
+def text_splitter(query_result):
+    return [line.strip() for line in query_result.split('\n') if line.strip()]
+
 
 def divide_text(query_result, chunk_size):
     # splits a list into a list of lists,
@@ -32,8 +35,15 @@ def divide_text(query_result, chunk_size):
     def chunk_list(some_list,chunk_size):
             for i in range(0, len(some_list), chunk_size):
                 yield some_list[i:i+chunk_size]
-    split_text=[line.strip() for line in query_result.split('\n') if line.strip()] #
-    split_text = separate_date(split_text) #TODO i guess it's fine to run this for everything? idk tho, maybe just work it into exception handling
+
+    split_text=text_splitter(query_result)
+
+    if len(split_text) % chunk_size != 0:
+        split_text = separate_date(split_text)
+        if len(split_text) % chunk_size != 0:
+            logging.exception("Table Error")
+            return []
+
     divided_text = list(chunk_list(split_text, chunk_size))
     return divided_text
 
@@ -55,7 +65,7 @@ def dataframe_exception(row_list, columns):
 
 def separate_date(row_list):
     new_list = []
-    regex_string = r"^(\d+/\d+/\d+)\s?([\w\s/.]+)$"
+    regex_string = r"(\d+/\d+/\d+)\s?(.*)"
     regex_query = re.compile(regex_string)
     for i in range(len(row_list)):
         result = re.fullmatch(regex_query, row_list[i])
@@ -75,15 +85,16 @@ class PageFactory:
             logging.exception("PageFactory requires either a url string or html file")
 
         html = html if html else PageFactory.pull_html(url)
+        soup = bs(html, 'html.parser')
 
-        if 'Disclosure reporting details' not in str(html):
-            logging.exception(f'Page Error for url {url}, html {str(html)}')
+        if 'Disclosure reporting details' not in soup.text:
+            logging.exception(f'Page Error for url {url}: No Disclosure Report')
             return None
 
-        if 'Lobbyist Entity' in str(html):
-            return EntityDataPage(html, url)
+        if 'Lobbyist Entity' in soup.text:
+            return EntityDataPage(soup, url)
         else:
-            return LobbyistDataPage(html, url)
+            return LobbyistDataPage(soup, url)
 
     def pull_html(url):
         headers={"User-Agent": "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"}
@@ -96,12 +107,12 @@ class PageFactory:
 # It also has the ability to save the tables to disk in different ways
 class DataPage:
 
-    def __init__(self, html, url = None):
+    def __init__(self, soup, url = None):
         self.has_error = False  # flag for debugging purposes
         self.url = url
         self.tables = {} # A dictionary that will hold all the tables as they are extracted
-        self.soup = bs(html, 'html.parser')
-        self.dfs = pd.read_html(html)
+        self.soup = soup
+        self.dfs = pd.read_html(str(soup))
 
         self.get_header()
         logging.info(f'Got Header {self.source_name} {self.date_range}')
