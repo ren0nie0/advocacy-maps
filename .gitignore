@@ -80,3 +80,16 @@ lobbying/lobbydoodles.ipynb
 
 # .pyc files are binary caches and thus not intended to be committed
 *.pyc
+lobbying/tests/testfiles/2005_pages.pkl
+lobbying/tests/testfiles/2012_urls.pkl
+lobbying/tests/testfiles/2013_urls.pkl
+lobbying/tests/testfiles/2014_urls.pkl
+lobbying/tests/testfiles/2015_urls.pkl
+lobbying/tests/testfiles/2016_urls.pkl
+lobbying/tests/testfiles/2017_urls.pkl
+lobbying/tests/testfiles/2018_urls.pkl
+lobbying/tests/testfiles/2019_urls.pkl
+lobbying/tests/testfiles/2020_urls.pkl
+lobbying/tests/testfiles/2021_urls.pkl
+lobbying/tests/testfiles/2022_urls.pkl
+lobbying/tests/testfiles/all_current_urls.pkl

@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from bs4 import BeautifulSoup as bs
+import src.settings as settings
 import psycopg2
 import psycopg2.extras as extras
 import requests
@@ -36,18 +37,18 @@ class PageFactory:
 
 
 class DataPage:
-    columns_dict =      {'campaign_contributions':
-                            ['Date','Recipient name','Office Sought','Amount'],
-                        'lobbying_activity':
-                            ['Lobbyist name','Client name','House / Senate','Bill Number or Agency Name','Bill title or activity','Agent position','Amount','Direct business association'],
-                        'client_compensation':
-                            ['Client name','Amount'],
-                        'pre2020_lobbying_activity':
-                            ['Date','Activity or bill No and Title','Lobbyist name','Client represented'],
-                        'headers':
-                            ['authorizing_officer_or_lobbyist_name','agent_type_or_title','business_name','address','city_state_zip_code','country', 'phone'],
-                        'all':
-                            ['source_name', 'date_range', 'source_type']}
+    columns_dict =  {'campaign_contributions':
+                        ['Date','lobbyist_name','Recipient name','Office Sought','Amount'],
+                    'lobbying_activity':
+                        ['Lobbyist name','Client name','House / Senate','Bill Number or Agency Name','Bill title or activity','Agent position','Amount','Direct business association'],
+                    'client_compensation':
+                        ['Client name','Amount'],
+                    'pre_2020_lobbying_activity':
+                        ['Date','Activity or bill No and Title','Lobbyist name','Client represented'],
+                    'headers':
+                        ['source_name','source_type','date_range','authorizing_officer_or_lobbyist_name','agent_type_or_title','business_name','address','city_state_zip_code','country', 'phone'],
+                    'all':
+                        ['header_id']}
 
     def __init__(self, soup, url = None):
         self.soup = soup
@@ -64,10 +65,13 @@ class DataPage:
         if self.year >= 2020:
             tables.lobbying_activity = self.get_lobbying_activity()
         else:
-            tables.pre2020_lobbying_activity = self.get_generic_table('grdvActivities', drop_last_row=False)
+            tables.pre_2020_lobbying_activity = self.get_generic_table('grdvActivities', drop_last_row=False)
 
-        tables.campaign_contributions = self.get_generic_table("grdvCampaignContribution", DataPage.columns_dict['campaign_contributions'])
-        tables.client_compensation = self.get_generic_table("grdvClientPaidToEntity", DataPage.columns_dict['client_compensation'])
+        tables.campaign_contributions = self.get_generic_table("grdvCampaignContribution")
+        if self.type == 'Lobbyist':
+            for row in tables.campaign_contributions:
+                row.insert(1, self.source_name)
+        tables.client_compensation = self.get_generic_table("grdvClientPaidToEntity")
         return tables
 
     def get_header_table(self):
@@ -87,7 +91,7 @@ class DataPage:
         return row_list
 
     def add_source_to_row(self, row_list):
-        return [self.source_name, self.date_range, self.type] + row_list
+        return [self.source_name, self.type, self.date_range] + row_list
 
     def get_generic_table(self, table_tag_includes, drop_last_row=True):
         table_list = []
@@ -105,7 +109,7 @@ class DataPage:
         if cells:
             for cell in cells:
                 row_list.append(cell.text.strip().replace('\n', '; '))
-        row_list = self.add_source_to_row(row_list)
+        # row_list = self.add_source_to_row(row_list)
         return row_list
 
     def get_lobbying_activity(self):
@@ -128,19 +132,37 @@ class DataPage:
 
     def save(self, save_type='psql'):
         if save_type == 'psql':
-            for table_name in self.tables.__dict__.keys():
-                self.write_data_to_psql(table_name)
+            conn = psycopg2.connect(**settings.psql_params_dict)
+            header_id = self.write_header_to_psql(conn)
+            if header_id:
+                for table_name in self.tables.__dict__.keys():
+                    self.write_data_to_psql(table_name, header_id)
 
-    def write_data_to_psql(self, table_name):
-        params_dict = {
-            'host'      : 'localhost',
-            'port'      : '5432',
-            'database'  : 'maple_lobbying',
-            'user'      : 'geekc',
-            'password'  : 'asdf'
-        }
-        conn = psycopg2.connect(**params_dict)
-        table = [tuple(row) for row in self.tables.__dict__[table_name]]
+    def write_header_to_psql(self, conn):
+        table = str(tuple(self.header))
+        cols = ','.join([col.lower().replace(",","").replace(" ","_").replace('/','or') for col in DataPage.columns_dict['headers']])
+        query = "INSERT INTO headers(%s) VALUES %s" % (cols, table)
+        with conn.cursor() as cursor:
+            try:
+                cursor.execute(query)
+                conn.commit()
+                logging.info(f"table successfully inserted into table 'headers'")
+                query = 'select count(*) from headers;'
+                cursor.execute(query)
+                header_id = cursor.fetchone()[0]
+                return header_id
+            except (Exception, psycopg2.DatabaseError) as error:
+                print(f"Error: {error} On table 'headers'")
+                conn.rollback()
+                cursor.close()
+                return False
+
+    def write_data_to_psql(self, table_name, header_id):
+        conn = psycopg2.connect(**settings.psql_params_dict)
+        table_list = self.tables.__dict__[table_name]
+        for row in table_list:
+            row.insert(0, str(header_id))
+        table = [tuple(row) for row in table_list]
         cols = ','.join([col.lower().replace(",","").replace(" ","_").replace('/','or') for col in DataPage.columns_dict['all'] + DataPage.columns_dict[table_name]])
         query = "INSERT INTO %s(%s) VALUES %%s" % (table_name, cols)
         cursor = conn.cursor()
@@ -151,6 +173,6 @@ class DataPage:
             print(f"Error: {error}On table {table_name}")
             conn.rollback()
             cursor.close()
-            return 1
+            print( 1)
         logging.info(f"table successfully inserted into table '{table_name}'")
         cursor.close()
