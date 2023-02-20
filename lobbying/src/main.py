@@ -1,23 +1,20 @@
-## TODO:
-## SAVE HTML
-# workflow goes: run scraper -> save html from each page to disk -> iterate thru html pages and save tables to disk
-# Need to change: Right now scraper just generates url's, we should just go ahead and have it save the relevant html to file
-#                 Scraper is currently configured to just suck up 2020 data, need to make that variable - DONE
-
-# FINALIZE BEHAVIOR
-# the program should examine it's environment when run to see if files have been downloaded yet.
-#               ALTERNATELY, query our database to find the latest date, and get the one after that
-#       if NO, it needs to download all the files, from every year, and convert them to tables
-#       if YES, it needs to download the LATEST files and convert them to tables
-# After generating tables, we need to upload them to whatever long-term storage solution we are using
-#
-# right now, we need to start saving it to a SQL database locally
-
+import logging
+import pickle
 from lobbyingDataPage import *
 from lobbyingScraper import *
 
 if __name__ == "__main__":
-    #disclosure_links = extract_disclosures(extract_client_links())
-    #html_list = download_html_list(disclosure_links)
-    disclosure_url_list = extract_disclosures(extract_client_links('2020'))
-    save_data_from_url_list(disclosure_url_list, save_type='psql')
+    logging.basicConfig(level=logging.CRITICAL)
+
+    for year in range(2007,2023): #remember, this will generate 2005-2022, NOT 2023
+        print(f'YEAR: {year}')
+        print(f'Collecting Disclosure URLs for year {year}')
+        disclosure_urls = get_disclosures_by_year(year)
+        print(f"{len(disclosure_urls)} disclosure urls collected.")
+        filename = f'../tests/testfiles/{year}_urls.pkl'
+        print(f"URL list acquired. Saving to {filename}")
+        with open(filename, 'wb+') as f:
+                    pickle.dump(disclosure_urls, f)
+    print("Job's done!")
+
+
