@@ -9,15 +9,15 @@ import logging
 
 
 class PageFactory:
-    def __new__(cls, html=None, url=None):
-        if not html:
-            if not url:
-                logging.exception("PageFactory requires either a url string or html file")
-                return
-            logging.debug(f'Pulling data from URL: {url}')
-            html = PageFactory.pull_html(url)
+    def __new__(cls, url):
 
+        if not url:
+            logging.exception("PageFactory requires a url")
+            return
+        logging.debug(f'Pulling data from URL: {url}')
+        html = PageFactory.pull_html(url)
         soup = bs(html, 'html.parser')
+
         if PageFactory.check_validity(soup, url):
             return DataPage(soup, url)
 
@@ -39,14 +39,16 @@ class PageFactory:
 class DataPage:
     columns_dict =  {'campaign_contributions':
                         ['Date','lobbyist_name','Recipient name','Office Sought','Amount'],
-                    'lobbying_activity':
-                        ['Lobbyist name','Client name','House / Senate','Bill Number or Agency Name','Bill title or activity','Agent position','Amount','Direct business association'],
                     'client_compensation':
                         ['Client name','Amount'],
-                    'pre_2020_lobbying_activity':
-                        ['Date','Activity or bill No and Title','Lobbyist name','Client represented'],
+                    'lobbying_activity':
+                        ['Lobbyist name','Client name','House / Senate','Bill Number or Agency Name','Bill title or activity','Agent position','Compensation received','Direct business association'],
+                    'pre_2016_lobbying_activity':
+                        ['Activity or Bill No and Title','Lobbyist name','Agent position','Direct business association','Client name','Compensation received'],
+                    'pre_2010_lobbying_activity':
+                        ['Date','Activity or bill No and Title','Lobbyist name','Client name'],
                     'headers':
-                        ['source_name','source_type','date_range','authorizing_officer_or_lobbyist_name','agent_type_or_title','business_name','address','city_state_zip_code','country', 'phone'],
+                        ['source_name','source_type','date_range','authorizing_officer_or_lobbyist_name','agent_type_or_title','business_name','address','city_state_zip_code','country', 'phone', 'url'],
                     'all':
                         ['header_id']}
 
@@ -62,10 +64,19 @@ class DataPage:
     # gets all the tables
     def get_all_tables(self):
         tables = SimpleNamespace()
-        if self.year >= 2020:
+        # if self.year < 2010:
+        #     tables.pre_2010_lobbying_activity = self.get_pre_2010_lobbying_activity()
+        # elif self.year < 2016:
+        #     tables.pre_2016_lobbying_activity = self.get_pre_2016_lobbying_activity()
+        # else:
+        #     tables.lobbying_activity = self.get_lobbying_activity()
+        if 'DateActivity or Bill No and Title' in self.soup.text:
+            tables.pre_2010_lobbying_activity = self.get_pre_2010_lobbying_activity()
+        if "Agent's positionDirect business association with public officialClient representedCompensation received" in self.soup.text:
+            tables.pre_2016_lobbying_activity = self.get_pre_2016_lobbying_activity()
+        elif "House / SenateBill Number or Agency Name" in self.soup.text:
             tables.lobbying_activity = self.get_lobbying_activity()
-        else:
-            tables.pre_2020_lobbying_activity = self.get_generic_table('grdvActivities', drop_last_row=False)
+
 
         tables.campaign_contributions = self.get_generic_table("grdvCampaignContribution")
         if self.type == 'Lobbyist':
@@ -88,6 +99,7 @@ class DataPage:
         else:
             self.source_name = row_list[2]
         row_list = self.add_source_to_row(row_list)
+        row_list.append(self.url)
         return row_list
 
     def add_source_to_row(self, row_list):
@@ -122,7 +134,23 @@ class DataPage:
             rows = table.findAll('tr', class_=lambda tag: tag and 'Grid' in tag and 'Header' not in tag)
             for row in rows:
                 table_list.append(self.process_row(row, [lobbyist_name, client_name]))
+        if table_list and 'No activities were disclosed for this reporting period.' in table_list[0]:
+            return []
         return table_list
+
+    def get_pre_2010_lobbying_activity(self):
+        table = self.get_generic_table('grdvActivities', drop_last_row=False)
+        if self.type == 'Lobbyist':
+            for i in range(len(table)):
+                table[i].insert(-1, self.source_name)
+        return table
+
+    def get_pre_2016_lobbying_activity(self):
+        table = self.get_generic_table('grdvActivities', drop_last_row=False)
+        if self.type == 'Lobbyist':
+            for i in range(len(table)):
+                table[i].insert(1, self.source_name)
+        return table
 
     def assign_lobbyist_and_client_names(self, full_table):
         if self.type == 'Entity':
@@ -139,12 +167,12 @@ class DataPage:
                     self.write_data_to_psql(table_name, header_id)
 
     def write_header_to_psql(self, conn):
-        table = str(tuple(self.header))
+        table = tuple(self.header)
         cols = ','.join([col.lower().replace(",","").replace(" ","_").replace('/','or') for col in DataPage.columns_dict['headers']])
-        query = "INSERT INTO headers(%s) VALUES %s" % (cols, table)
+        query = "INSERT INTO headers(%s) VALUES %%s" % (cols)
         with conn.cursor() as cursor:
             try:
-                cursor.execute(query)
+                cursor.execute(query, (table,))
                 conn.commit()
                 logging.info(f"table successfully inserted into table 'headers'")
                 query = 'select count(*) from headers;'
