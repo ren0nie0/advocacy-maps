@@ -13,13 +13,15 @@ class PageFactory:
 
         if not url:
             logging.exception("PageFactory requires a url")
-            return
+            return BlankPage()
         logging.debug(f'Pulling data from URL: {url}')
         html = PageFactory.pull_html(url)
         soup = bs(html, 'html.parser')
 
         if PageFactory.check_validity(soup, url):
             return DataPage(soup, url)
+        else:
+            return BlankPage()
 
     def pull_html(url):
         headers={"User-Agent": "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"}
@@ -35,6 +37,9 @@ class PageFactory:
             return False
         return True
 
+class BlankPage:
+    def save(self, save_type):
+        return
 
 class DataPage:
     columns_dict =  {'campaign_contributions':
