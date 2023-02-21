@@ -1,7 +1,6 @@
 DROP TABLE IF EXISTS headers;
 DROP TABLE IF EXISTS lobbying_activity;
-DROP TABLE IF EXISTS pre2020_lobbying_activity;
-DROP TABLE IF EXISTS pre_2020_lobbying_activity
+DROP TABLE IF EXISTS pre_2020_lobbying_activity;
 DROP TABLE IF EXISTS campaign_contributions;
 DROP TABLE IF EXISTS client_compensation;
 
@@ -17,6 +16,7 @@ CREATE TABLE IF NOT EXISTS headers (
   city_state_zip_code VARCHAR(255),
   country VARCHAR(255),
   phone VARCHAR(50),
+  url VARCHAR(150),
   PRIMARY KEY(source_name, date_range)
 );
 

@@ -46,7 +46,7 @@ class DataPage:
                     'pre_2020_lobbying_activity':
                         ['Date','Activity or bill No and Title','Lobbyist name','Client represented'],
                     'headers':
-                        ['source_name','source_type','date_range','authorizing_officer_or_lobbyist_name','agent_type_or_title','business_name','address','city_state_zip_code','country', 'phone'],
+                        ['source_name','source_type','date_range','authorizing_officer_or_lobbyist_name','agent_type_or_title','business_name','address','city_state_zip_code','country', 'phone', 'url'],
                     'all':
                         ['header_id']}
 
@@ -88,6 +88,7 @@ class DataPage:
         else:
             self.source_name = row_list[2]
         row_list = self.add_source_to_row(row_list)
+        row_list.append(self.url)
         return row_list
 
     def add_source_to_row(self, row_list):
