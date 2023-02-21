@@ -9,15 +9,15 @@ import logging
 
 
 class PageFactory:
-    def __new__(cls, html=None, url=None):
-        if not html:
-            if not url:
-                logging.exception("PageFactory requires either a url string or html file")
-                return
-            logging.debug(f'Pulling data from URL: {url}')
-            html = PageFactory.pull_html(url)
+    def __new__(cls, url):
 
+        if not url:
+            logging.exception("PageFactory requires a url")
+            return
+        logging.debug(f'Pulling data from URL: {url}')
+        html = PageFactory.pull_html(url)
         soup = bs(html, 'html.parser')
+
         if PageFactory.check_validity(soup, url):
             return DataPage(soup, url)
 
@@ -43,10 +43,8 @@ class DataPage:
                         ['Client name','Amount'],
                     'lobbying_activity':
                         ['Lobbyist name','Client name','House / Senate','Bill Number or Agency Name','Bill title or activity','Agent position','Compensation received','Direct business association'],
-
                     'pre_2016_lobbying_activity':
                         ['Activity or Bill No and Title','Lobbyist name','Agent position','Direct business association','Client name','Compensation received'],
-
                     'pre_2010_lobbying_activity':
                         ['Date','Activity or bill No and Title','Lobbyist name','Client name'],
                     'headers':
