@@ -1,6 +1,7 @@
 DROP TABLE IF EXISTS headers;
 DROP TABLE IF EXISTS lobbying_activity;
-DROP TABLE IF EXISTS pre_2020_lobbying_activity;
+DROP TABLE IF EXISTS pre_2016_lobbying_activity;
+DROP TABLE IF EXISTS pre_2010_lobbying_activity;
 DROP TABLE IF EXISTS campaign_contributions;
 DROP TABLE IF EXISTS client_compensation;
 
@@ -17,15 +18,26 @@ CREATE TABLE IF NOT EXISTS headers (
   country VARCHAR(255),
   phone VARCHAR(50),
   url VARCHAR(150),
-  PRIMARY KEY(source_name, date_range)
+  PRIMARY KEY(url)
 );
 
-CREATE TABLE IF NOT EXISTS pre_2020_lobbying_activity (
+CREATE TABLE IF NOT EXISTS pre_2016_lobbying_activity (
+  header_id VARCHAR(10),
+  activity_or_bill_no_and_title TEXT,
+  lobbyist_name varchar(255),
+  agent_position VARCHAR(255),
+  direct_business_association TEXT,
+  client_name VARCHAR(255),
+  compensation_received VARCHAR(255)
+
+);
+
+CREATE TABLE IF NOT EXISTS pre_2010_lobbying_activity (
   header_id VARCHAR(10),
   date VARCHAR(50),
-  activity_or_bill_no_and_title VARCHAR(255),
+  activity_or_bill_no_and_title TEXT,
   lobbyist_name VARCHAR(255),
-  client_represented VARCHAR(100)
+  client_name VARCHAR(100)
 );
 
 CREATE TABLE IF NOT EXISTS lobbying_activity (
@@ -36,8 +48,8 @@ CREATE TABLE IF NOT EXISTS lobbying_activity (
   bill_number_or_agency_name VARCHAR(255),
   bill_title_or_activity TEXT,
   agent_position VARCHAR(255),
-  amount VARCHAR(255),
-  direct_business_association VARCHAR(255)
+  compensation_received VARCHAR(255),
+  direct_business_association TEXT
 );
 
 CREATE TABLE IF NOT EXISTS campaign_contributions (
