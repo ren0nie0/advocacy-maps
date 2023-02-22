@@ -6,6 +6,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+import datetime
 
 def get_lobbyist_urls(year, driver):
     year = str(year)
@@ -47,4 +48,15 @@ def get_disclosures_by_year(year):
         results = get_disclosure_urls(url, driver)
         for result in results:
             disclosure_urls.append(result)
+    return disclosure_urls
+
+def get_latest_disclosures():
+    year = datetime.date.today().year
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+    lobbyist_urls = get_lobbyist_urls(year, driver)
+    disclosure_urls = []
+    for url in lobbyist_urls:
+        results = get_disclosure_urls(url, driver)
+        if results:
+            disclosure_urls.append(results[-1])
     return disclosure_urls
