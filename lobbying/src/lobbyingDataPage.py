@@ -7,6 +7,14 @@ import requests
 import os
 import logging
 
+psql_params_dict = {
+    'host'      : 'localhost',
+    'port'      : '5432',
+    'database'  : 'maple_lobbying',
+    'user'      : 'geekc',
+    'password'  : 'asdf'
+}
+
 
 class PageFactory:
     def __new__(cls, url):
@@ -38,7 +46,7 @@ class PageFactory:
         return True
 
 class BlankPage:
-    def save(self, save_type):
+    def save(self, save_type=None):
         return
 
 class DataPage:
@@ -166,46 +174,50 @@ class DataPage:
     def save(self, save_type='psql'):
         if save_type == 'psql':
             conn = psycopg2.connect(**settings.psql_params_dict)
-            header_id = self.write_header_to_psql(conn)
-            if header_id:
+            header_id = self.get_header_id(conn)
+            if self.write_header_to_psql(conn, header_id):
                 for table_name in self.tables.__dict__.keys():
-                    self.write_data_to_psql(table_name, header_id)
+                    self.write_table_to_psql(table_name, conn, header_id)
 
-    def write_header_to_psql(self, conn):
-        table = tuple(self.header)
-        cols = ','.join([col.lower().replace(",","").replace(" ","_").replace('/','or') for col in DataPage.columns_dict['headers']])
-        query = "INSERT INTO headers(%s) VALUES %%s" % (cols)
+    def write_header_to_psql(self, conn, header_id):
+        self.header.insert(0, str(header_id)) #add header id
+        table = [tuple(row) for row in [self.header]]
+        return self.execute_insert_table_query('headers', table, conn)
+
+
+    def write_table_to_psql(self, table_name, conn, header_id):
+        table_list = self.tables.__dict__[table_name]
+        if not table_list: return True #If the table is empty let's not waste any time
+        for row in table_list: row.insert(0, str(header_id)) #add header id to each row
+        table = [tuple(row) for row in table_list]
+        return self.execute_insert_table_query(table_name, table, conn)
+
+    def get_header_id(self, conn):
+        with conn.cursor() as cursor:
+            query = 'select MAX(header_id) from headers;'
+            cursor.execute(query)
+            response = cursor.fetchone()[0]
+            header_id = response + 1 if response else 1
+            return header_id
+
+    #returns true if all rows of the table, if any, are uploaded to the database
+    #returns false if any errors occur
+    def execute_insert_table_query(self, table_name, table, conn):
+        columns = DataPage.columns_dict['all'] + DataPage.columns_dict[table_name]
+        cols = ','.join([col.lower().replace(",","").replace(" ","_").replace('/','or') for col in columns])
+        query = "INSERT INTO %s(%s) VALUES %%s" % (table_name, cols)
+
         with conn.cursor() as cursor:
             try:
-                cursor.execute(query, (table,))
+                extras.execute_values(cursor, query, table)
                 conn.commit()
-                logging.info(f"table successfully inserted into table 'headers'")
-                query = 'select count(*) from headers;'
-                cursor.execute(query)
-                header_id = cursor.fetchone()[0]
-                return header_id
+                logging.info(f"table successfully inserted into table '{table_name}'")
+                return True
+
             except (Exception, psycopg2.DatabaseError) as error:
-                print(f"Error: {error} On table 'headers'")
+                print(f"Error: {error} On table {table_name}")
                 conn.rollback()
                 cursor.close()
                 return False
 
-    def write_data_to_psql(self, table_name, header_id):
-        conn = psycopg2.connect(**settings.psql_params_dict)
-        table_list = self.tables.__dict__[table_name]
-        for row in table_list:
-            row.insert(0, str(header_id))
-        table = [tuple(row) for row in table_list]
-        cols = ','.join([col.lower().replace(",","").replace(" ","_").replace('/','or') for col in DataPage.columns_dict['all'] + DataPage.columns_dict[table_name]])
-        query = "INSERT INTO %s(%s) VALUES %%s" % (table_name, cols)
-        cursor = conn.cursor()
-        try:
-            extras.execute_values(cursor, query, table)
-            conn.commit()
-        except (Exception, psycopg2.DatabaseError) as error:
-            print(f"Error: {error}On table {table_name}")
-            conn.rollback()
-            cursor.close()
-            print( 1)
-        logging.info(f"table successfully inserted into table '{table_name}'")
-        cursor.close()
+
