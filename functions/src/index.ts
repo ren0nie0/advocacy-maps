@@ -7,6 +7,7 @@ export {
   updateBillSearchIndex,
   upgradeBillSearchIndex
 } from "./bills"
+export { updateBillTracker } from "./analysis"
 export { fetchCityBatch, startCityBatches } from "./cities"
 export {
   fetchCommitteeBatch,
@@ -28,3 +29,8 @@ export {
   upgradeTestimonySearchIndex
 } from "./testimony"
 export * from "./triggerPubsubFunction"
+
+// Export the health check last so it is loaded last.
+export * from "./healthCheck"
+
+export type FunctionName = keyof typeof import(".")

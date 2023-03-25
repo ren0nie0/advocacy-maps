@@ -1,21 +1,35 @@
 import { formUrl } from "components/publish/hooks"
 import { NoResults } from "components/search/NoResults"
+import { TestimonyContent } from "components/testimony"
 import { ViewAttachment } from "components/ViewAttachment"
-import { useState } from "react"
+import React, { RefObject, useRef, useState } from "react"
+import { ListGroup, ListGroupItem } from "react-bootstrap"
 import Image from "react-bootstrap/Image"
 import styled from "styled-components"
 import { useMediaQuery } from "usehooks-ts"
-import { Button, Col, Form, Row } from "../bootstrap"
+import { Button, Col, Form, OverlayTrigger, Row } from "../bootstrap"
 import {
   Testimony,
-  useBill,
   usePublicProfile,
   UsePublishedTestimonyListing
 } from "../db"
-import { formatBillId, formatTestimonyLinks } from "../formatting"
-import { Internal } from "../links"
+import { formatBillId } from "../formatting"
+import { Internal, maple } from "../links"
 import { TitledSectionCard } from "../shared"
 import { PositionLabel } from "./PositionBug"
+import { ReportModal } from "./ReportModal"
+
+import { Card as MapleCard } from "../Card"
+import { Card as BootstrapCard } from "react-bootstrap"
+
+const Container = styled.div`
+  font-family: Nunito;
+`
+const Head = styled(BootstrapCard.Header)`
+  background-color: var(--bs-blue);
+  color: white;
+  font-size: 22px;
+`
 
 const ViewTestimony = (
   props: UsePublishedTestimonyListing & {
@@ -26,41 +40,38 @@ const ViewTestimony = (
   }
 ) => {
   const {
-    pagination,
     items,
     setFilter,
     showControls = false,
-    showBillNumber = false,
-    className
+    showBillNumber = false
   } = props
   const testimony = items.result ?? []
 
-  const [orderBy, setOrderBy] = useState<string>()
-
   return (
-    <TitledSectionCard
-      title={"Testimony"}
-      className={className}
-      // bug={<SortTestimonyDropDown orderBy={orderBy} setOrderBy={setOrderBy} />}
-    >
-      {testimony.length > 0 ? (
-        testimony.map(t => (
-          <TestimonyItem
-            key={t.authorUid + t.billId}
-            testimony={t}
-            showControls={showControls}
-            showBillNumber={showBillNumber}
-          />
-        ))
-      ) : (
-        <NoResults>
-          There is no testimony here. <br />
-          <b>Be the first and add one!</b>
-        </NoResults>
-      )}
-      <div className="p-3" />
-      {/* <PaginationButtons pagination={pagination} /> */}
-    </TitledSectionCard>
+    <Container>
+      <MapleCard
+        headerElement={<Head>Testimony</Head>}
+        body={
+          <BootstrapCard.Body>
+            {testimony.length > 0 ? (
+              testimony.map(t => (
+                <TestimonyItem
+                  key={t.authorUid + t.billId}
+                  testimony={t}
+                  showControls={showControls}
+                  showBillNumber={showBillNumber}
+                />
+              ))
+            ) : (
+              <NoResults>
+                There is no testimony here. <br />
+                <b>Be the first and add one!</b>
+              </NoResults>
+            )}
+          </BootstrapCard.Body>
+        }
+      />
+    </Container>
   )
 }
 
@@ -113,6 +124,32 @@ const Author = styled<{ testimony: Testimony }>(({ testimony, ...props }) => {
   }
 `
 
+const MoreButton = ({ children }: { children: React.ReactChild }) => {
+  const menuRef = useRef<HTMLDivElement>(null)
+  return (
+    <OverlayTrigger
+      rootClose
+      trigger="click"
+      placement="bottom-end"
+      overlay={
+        <div
+          ref={menuRef}
+          style={{ position: "absolute", background: "white" }}
+        >
+          {children}
+        </div>
+      }
+    >
+      <button
+        style={{ border: "none", background: "none" }}
+        aria-label="more actions"
+      >
+        ...
+      </button>
+    </OverlayTrigger>
+  )
+}
+
 export const TestimonyItem = ({
   testimony,
   showControls,
@@ -124,16 +161,27 @@ export const TestimonyItem = ({
 }) => {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const published = testimony.publishedAt.toDate().toLocaleDateString()
+  const billLink = maple.bill({
+    id: testimony.billId,
+    court: testimony.court
+  })
 
-  const { result: bill } = useBill(testimony.billId)
+  const [isReporting, setIsReporting] = useState(false)
 
   return (
     <div className={`bg-white border-0 border-bottom p-3 p-sm-4 p-md-5`}>
       <div className={`bg-white border-0 h5 d-flex`}>
         <Author testimony={testimony} className="flex-grow-1" />
+        <MoreButton>
+          <ListGroup>
+            <ListGroup.Item action onClick={() => setIsReporting(true)}>
+              Report
+            </ListGroup.Item>
+          </ListGroup>
+        </MoreButton>
         {isMobile && showControls && (
           <>
-            <Internal href={formUrl(testimony.billId)}>
+            <Internal href={formUrl(testimony.billId, testimony.court)}>
               <Image
                 className="px-2 ms-auto align-self-center"
                 src="/edit-testimony.svg"
@@ -142,8 +190,7 @@ export const TestimonyItem = ({
                 width={50}
               />
             </Internal>
-
-            <Internal href={`/bill?id=${testimony.billId}`}>
+            <Internal href={billLink}>
               <Image
                 className="px-2 align-self-center"
                 src="/delete-testimony.svg"
@@ -160,16 +207,14 @@ export const TestimonyItem = ({
           <Col className={`h5 fw-bold align-self-center`}>
             {showBillNumber && (
               <>
-                <Internal href={`/bill?id=${testimony.billId}`}>
+                <Internal href={billLink}>
                   {formatBillId(testimony.billId)}
                 </Internal>
                 {" · "}
               </>
             )}
             {`${published} · `}
-            <Internal
-              href={`/testimony?author=${testimony.authorUid}&billId=${testimony.billId}`}
-            >
+            <Internal href={maple.testimony({ publishedId: testimony.id })}>
               Full Text
             </Internal>
           </Col>
@@ -180,7 +225,7 @@ export const TestimonyItem = ({
           </Col>
         </Row>
         <Row className={`col m2`}>
-          <Col className={`p-4 ps-3`} style={{ whiteSpace: "pre-wrap" }}>
+          <Col className={`p-4 ps-3`}>
             <FormattedTestimonyContent testimony={testimony.content} />
           </Col>
           {showControls && (
@@ -192,12 +237,30 @@ export const TestimonyItem = ({
                 minWidth: "20%"
               }}
             >
-              <Internal href={formUrl(testimony.billId)}>Edit</Internal>
-              <Internal href={`/bill?id=${testimony.billId}`}>Delete</Internal>
+              <Internal href={formUrl(testimony.billId, testimony.court)}>
+                Edit
+              </Internal>
+              <Internal href={billLink}>Delete</Internal>
             </Col>
           )}
         </Row>
         <ViewAttachment testimony={testimony} />
+        {isReporting && (
+          <ReportModal
+            onClose={() => setIsReporting(false)}
+            onReport={report => {
+              // TODO: connect to API call to add a report from this user
+              console.log({ report })
+            }}
+            reasons={[
+              "Personal Information",
+              "Offensive",
+              "Violent",
+              "Spam",
+              "Phishing"
+            ]}
+          />
+        )}
       </div>
     </div>
   )
@@ -208,34 +271,23 @@ export const FormattedTestimonyContent = ({
 }: {
   testimony: string
 }) => {
-  const TESTIMONY_CHAR_LIMIT = 442
+  const snippetChars = 500
   const [showAllTestimony, setShowAllTestimony] = useState(false)
+  const snippet = showAllTestimony
+    ? testimony
+    : testimony.slice(0, snippetChars)
+  const canExpand = snippet.length !== testimony.length
 
   return (
     <>
-      {testimony.length > TESTIMONY_CHAR_LIMIT && !showAllTestimony ? (
-        <>
-          <div
-            className="col m2"
-            dangerouslySetInnerHTML={formatTestimonyLinks(
-              testimony,
-              TESTIMONY_CHAR_LIMIT
-            )}
-          />
-          <Col className="ms-auto d-flex justify-content-start justify-content-sm-end">
-            <Button
-              variant="link"
-              onClick={() => setShowAllTestimony(!showAllTestimony)}
-            >
-              Show More
-            </Button>
-          </Col>
-        </>
-      ) : (
-        <div
-          className="col m2"
-          dangerouslySetInnerHTML={formatTestimonyLinks(testimony)}
-        />
+      <TestimonyContent className="col m2" testimony={snippet} />
+
+      {canExpand && (
+        <Col className="ms-auto d-flex justify-content-start justify-content-sm-end">
+          <Button variant="link" onClick={() => setShowAllTestimony(true)}>
+            Show More
+          </Button>
+        </Col>
       )}
     </>
   )

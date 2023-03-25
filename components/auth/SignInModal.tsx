@@ -16,8 +16,10 @@ export default function SignInModal({
   show,
   onHide,
   onForgotPasswordClick
-}: Pick<ModalProps, "show" | "onHide"> & {
+}: {
+  show?: boolean
   onForgotPasswordClick: () => void
+  onHide: () => void
 }) {
   const {
     register,
@@ -38,7 +40,7 @@ export default function SignInModal({
   }, [show, reset])
 
   const onSubmit = handleSubmit(credentials => {
-    signIn.execute(credentials)
+    signIn.execute(credentials).then(onHide)
   })
 
   return (
@@ -93,7 +95,7 @@ export default function SignInModal({
 
               <Divider className="px-4">or</Divider>
 
-              <SocialSignOnButtons />
+              <SocialSignOnButtons onComplete={onHide} />
             </Stack>
           </Form>
         </Col>
